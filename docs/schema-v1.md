@@ -1,4 +1,4 @@
-## 3. Contract: schema v1
+# Raider schema v1
 
 `POST /api/v1/runs`, `multipart/form-data`, header `Authorization: Bearer <project token>`.
 

@@ -31,7 +31,10 @@ module RaiderReporter
       head_ref = @env["GITHUB_HEAD_REF"].to_s
       return head_ref unless head_ref.empty?
 
-      @env["GITHUB_REF_NAME"] || @git.call("rev-parse", "--abbrev-ref", "HEAD")
+      return @env["GITHUB_REF_NAME"] if @env["GITHUB_REF_NAME"]
+
+      local = @git.call("rev-parse", "--abbrev-ref", "HEAD")
+      local == "HEAD" ? nil : local # "HEAD" means detached, not a branch name
     end
 
     def sha
@@ -39,7 +42,7 @@ module RaiderReporter
     end
 
     def git_command(*args)
-      out, status = Open3.capture2e("git", *args)
+      out, _err, status = Open3.capture3("git", *args)
       status.success? ? out.strip : nil
     rescue StandardError
       nil

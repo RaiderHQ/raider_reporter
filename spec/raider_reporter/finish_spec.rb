@@ -62,4 +62,13 @@ RSpec.describe "RaiderReporter.finish!" do
     RaiderReporter.finish!(out)
     expect(out.string).to eq("Raider report uploaded\n")
   end
+
+  it "treats a nil environment as empty" do
+    RaiderReporter.configuration.token = nil
+    RaiderReporter.configuration.environment = nil
+    run_one_test
+    RaiderReporter.finish!(out)
+    json = JSON.parse(File.read(File.join(RaiderReporter.configuration.output_dir, "run.json")))
+    expect(json["run"]["environment"].keys).to eq(%w[ruby os])
+  end
 end

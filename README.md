@@ -54,7 +54,7 @@ end
 ```ruby
 RaiderReporter.configure do |c|
   c.output_dir = "raider-results"
-  c.environment = { "browser" => "chrome", "suite" => "smoke" }
+  c.environment = { "browser" => "chrome", "suite" => "smoke", "headless" => true }
 end
 ```
 
@@ -64,7 +64,7 @@ end
 | `endpoint` | `ENV["RAIDER_ENDPOINT"]` | Base URL of the Raider server to upload to. |
 | `output_dir` | `"raider-results"` | Directory for local output. |
 | `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory inside `output_dir` before writing. Nothing else in `output_dir` is touched. |
-| `environment` | `{}` | Free-form string key/values stored with the run (browser, suite name, and so on). |
+| `environment` | `{}` | Free-form key/values stored with the run (browser, suite name, and so on). Values are JSON values: strings, booleans or numbers. |
 
 ## Local output
 
@@ -84,7 +84,7 @@ If both a token and an endpoint are set, the run (plus attachments) is uploaded 
 RAIDER_TOKEN=... RAIDER_ENDPOINT=https://your-raider-server bundle exec rspec
 ```
 
-On success the formatter prints `Raider report: <url>`. If either value is missing, nothing is uploaded and the local files are still written.
+On success the formatter prints `Raider report: <url>` (or `Raider report uploaded (run <id>)` if the server's response has no URL). If either value is missing, nothing is uploaded and the local files are still written.
 
 An upload carries at most 45 MB of attachments and at most 1000 attachment files. Attachments past that budget are left out of the upload (in order, with one warning) but stay in the local `raider-results/`.
 

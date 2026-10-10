@@ -37,4 +37,17 @@ RSpec.describe RaiderReporter::CiDetector do
   it "returns nil git info when git is unavailable" do
     expect(described_class.new(env: {}, git: ->(*) {}).git).to be_nil
   end
+
+  it "drops the branch on a detached HEAD" do
+    detached = ->(*args) { args == %w[rev-parse --abbrev-ref HEAD] ? "HEAD" : git.call(*args) }
+    info = described_class.new(env: {}, git: detached).git
+    expect(info).not_to have_key("branch")
+    expect(info["commit_sha"]).to eq("localsha")
+  end
+
+  it "reads git output without mixing in stderr" do
+    ok = instance_double(Process::Status, success?: true)
+    allow(Open3).to receive(:capture3).and_return(["feature-z\n", "warning: noise\n", ok])
+    expect(described_class.new(env: {}).git["branch"]).to eq("feature-z")
+  end
 end

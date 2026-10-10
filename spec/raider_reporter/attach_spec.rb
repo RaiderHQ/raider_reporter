@@ -41,6 +41,17 @@ RSpec.describe "RaiderReporter.attach" do
     end
   end
 
+  it "prints warnings even when Ruby warnings are disabled (-W0)" do
+    verbose = $VERBOSE
+    begin
+      $VERBOSE = nil
+      RaiderReporter.warn("still visible")
+    ensure
+      $VERBOSE = verbose
+    end
+    expect(err.string).to eq("[raider_reporter] still visible\n")
+  end
+
   def finish(collector)
     collector.finish_test(identifier: "i", full_name: "n", file_path: "f", line_number: 1,
                           status: "failed", duration_ms: 1, attempts: 1, tags: [], failure: nil)

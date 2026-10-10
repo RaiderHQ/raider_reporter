@@ -61,7 +61,8 @@ module RaiderReporter
     end
 
     def warn(message)
-      Kernel.warn("[raider_reporter] #{message}")
+      # $stderr.puts, not Kernel.warn: -W0 must not silence reporting problems.
+      $stderr.puts("[raider_reporter] #{message}")
     end
 
     def finish!(output = $stdout)
@@ -105,7 +106,7 @@ module RaiderReporter
 
     def default_environment
       { "ruby" => RUBY_VERSION, "os" => RbConfig::CONFIG["host_os"] }
-        .merge(configuration.environment.transform_keys(&:to_s))
+        .merge((configuration.environment || {}).transform_keys(&:to_s))
     end
   end
 end
