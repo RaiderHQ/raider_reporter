@@ -9,6 +9,8 @@ require_relative "raider_reporter/configuration"
 require_relative "raider_reporter/content_types"
 require_relative "raider_reporter/collector"
 require_relative "raider_reporter/writers/local"
+require_relative "raider_reporter/ci_detector"
+require_relative "raider_reporter/writers/uploader"
 
 module RaiderReporter
   class << self
@@ -52,9 +54,23 @@ module RaiderReporter
       Kernel.warn("[raider_reporter] #{message}")
     end
 
-    def finish!(_output = $stdout)
-      run = collector.finish_run(ci: nil, git: nil, environment: default_environment)
-      Writers::Local.new(configuration).write(Payload.new(run))
+    def finish!(output = $stdout)
+      detector = CiDetector.new
+      run = collector.finish_run(ci: detector.ci, git: detector.git, environment: default_environment)
+      payload = Payload.new(run)
+      begin
+        Writers::Local.new(configuration).write(payload)
+      rescue StandardError => e
+        warn("could not write #{configuration.output_dir}: #{e.class}: #{e.message}")
+      end
+      return nil unless configuration.upload?
+
+      result = Writers::Uploader.new(configuration).upload(payload)
+      if result.ok
+        output.puts("Raider report: #{result.url}")
+      else
+        warn("upload failed: #{result.error}")
+      end
       nil
     end
 
