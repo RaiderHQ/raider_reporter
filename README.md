@@ -86,6 +86,8 @@ RAIDER_TOKEN=... RAIDER_ENDPOINT=https://your-raider-server bundle exec rspec
 
 On success the formatter prints `Raider report: <url>`. If either value is missing, nothing is uploaded and the local files are still written.
 
+An upload carries at most 45 MB of attachments and at most 1000 attachment files. Attachments past that budget are left out of the upload (in order, with one warning) but stay in the local `raider-results/`.
+
 Reporting is fail-open: no error inside the gem, network failure, timeout (30 seconds) or non-2xx response will raise or change RSpec's exit status. Problems are printed as warnings prefixed with `[raider_reporter]`. An endpoint without `http://` or `https://` (for example `localhost:3000`) produces a warning and nothing is uploaded; a trailing slash is fine.
 
 The hosted Raider service is not public yet; uploads go to a Raider server whose address you provide in `RAIDER_ENDPOINT`.

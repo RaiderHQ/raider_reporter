@@ -9,14 +9,19 @@ module RaiderReporter
   module Writers
     class Uploader
       Result = Data.define(:ok, :url, :error)
+      # Keeps uploads under the server's 50 MB request limit and multipart part limit.
+      MAX_UPLOAD_ATTACHMENT_BYTES = 45 * 1024 * 1024
+      MAX_UPLOAD_ATTACHMENTS = 1000
 
-      def initialize(config, timeout: 30)
+      def initialize(config, timeout: 30, warn: RaiderReporter.method(:warn))
         @config = config
         @timeout = timeout
+        @warn = warn
       end
 
       def upload(payload)
         uri = runs_uri
+        payload = within_budget(payload)
         request = Net::HTTP::Post.new(uri)
         request["Authorization"] = "Bearer #{@config.token}"
         request["User-Agent"] = "raider_reporter/#{VERSION}"
@@ -40,6 +45,30 @@ module RaiderReporter
       end
 
       private
+
+      # Keeps the leading attachments that fit the byte and count budget and
+      # rebuilds the payload without the rest, so part names stay contiguous.
+      # The local run.json is written from the original payload and keeps all.
+      def within_budget(payload)
+        entries = payload.attachment_entries
+        bytes = 0
+        keep = entries.index do |entry|
+          bytes += File.size?(entry[:attachment].source_path).to_i
+          bytes > MAX_UPLOAD_ATTACHMENT_BYTES
+        end || entries.size
+        keep = [keep, MAX_UPLOAD_ATTACHMENTS].min
+        return payload if keep == entries.size
+
+        dropped = entries.size - keep
+        @warn.call("not uploading #{dropped} #{dropped == 1 ? 'attachment' : 'attachments'}: over the upload " \
+                   "budget of #{MAX_UPLOAD_ATTACHMENT_BYTES / (1024 * 1024)} MB / " \
+                   "#{MAX_UPLOAD_ATTACHMENTS} files; they remain in #{@config.output_dir}")
+        seen = 0
+        run = payload.run
+        Payload.new(run.with(results: run.results.map do |result|
+          result.with(attachments: result.attachments.select { (seen += 1) <= keep })
+        end))
+      end
 
       def add_field(body, boundary, name, value)
         body << "--#{boundary}\r\nContent-Disposition: form-data; name=\"#{name}\"\r\n\r\n".b

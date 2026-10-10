@@ -6,6 +6,8 @@ module RaiderReporter
   class Payload
     MODES = %i[local upload].freeze
 
+    attr_reader :run
+
     def initialize(run)
       @run = run
     end
