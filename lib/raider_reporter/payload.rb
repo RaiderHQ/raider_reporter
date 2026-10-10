@@ -1,0 +1,79 @@
+# frozen_string_literal: true
+
+module RaiderReporter
+  # Serializes a Run into schema v1. Local mode points attachments at copied
+  # files; upload mode points them at multipart part names.
+  class Payload
+    MODES = %i[local upload].freeze
+
+    def initialize(run)
+      @run = run
+    end
+
+    def to_h(mode:)
+      raise ArgumentError, "unknown mode #{mode.inspect}" unless MODES.include?(mode)
+
+      entries = attachment_entries.each
+      {
+        "schema_version" => SCHEMA_VERSION,
+        "client_run_id" => @run.client_run_id,
+        "run" => run_hash,
+        "results" => @run.results.map do |result|
+          result_hash(result).merge(
+            "attachments" => result.attachments.map { attachment_hash(entries.next, mode) }
+          )
+        end
+      }
+    end
+
+    def attachment_entries
+      @attachment_entries ||= @run.results.flat_map(&:attachments).each_with_index.map do |attachment, index|
+        {
+          attachment: attachment,
+          part: "att_#{index}",
+          path: "attachments/#{index}-#{File.basename(attachment.source_path)}"
+        }
+      end
+    end
+
+    private
+
+    def run_hash
+      {
+        "started_at" => @run.started_at&.utc&.iso8601,
+        "finished_at" => @run.finished_at&.utc&.iso8601,
+        "ci" => @run.ci,
+        "git" => @run.git,
+        "environment" => @run.environment
+      }.compact
+    end
+
+    def result_hash(result)
+      hash = {
+        "identifier" => result.identifier,
+        "full_name" => result.full_name,
+        "file_path" => result.file_path,
+        "line_number" => result.line_number,
+        "status" => result.status,
+        "duration_ms" => result.duration_ms,
+        "attempts" => result.attempts,
+        "tags" => result.tags
+      }
+      hash["failure"] = failure_hash(result.failure) if result.failure
+      hash
+    end
+
+    def failure_hash(failure)
+      {
+        "message" => failure.message,
+        "exception_class" => failure.exception_class,
+        "backtrace" => failure.backtrace
+      }
+    end
+
+    def attachment_hash(entry, mode)
+      ref = mode == :local ? { "path" => entry[:path] } : { "part" => entry[:part] }
+      { "name" => entry[:attachment].name, "content_type" => entry[:attachment].content_type }.merge(ref)
+    end
+  end
+end

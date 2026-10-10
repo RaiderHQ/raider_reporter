@@ -1,0 +1,4 @@
+/pkg/
+/raider-results/
+/Gemfile.lock
+*.gem
