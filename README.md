@@ -37,14 +37,17 @@ RSpec.configure do |config|
   config.after do |example|
     next unless example.exception
 
-    driver.save_screenshot("tmp/failure.png")
-    RaiderReporter.attach("screenshot", "tmp/failure.png", type: :png)
-    RaiderReporter.attach("recording", "tmp/failure.mp4", type: :video)
+    FileUtils.mkdir_p("tmp/screenshots")
+    path = "tmp/screenshots/#{example.id.gsub(/\W/, '_')}.png"
+    driver.save_screenshot(path)
+    RaiderReporter.attach("screenshot", path, type: :png)
   end
 end
 ```
 
-`attach` returns `true` on success. It returns `false` and prints a `[raider_reporter]` warning, never raising, if it is called outside a running example (for instance when the formatter is not loaded) or if the file does not exist. Attachments larger than 5 MB are skipped with a warning, as are files that disappear before the suite ends.
+`attach` copies the file right away, so the attachment keeps the bytes the file had at that moment even if the same path is overwritten by a later example. Using a path per example (as above) still makes the files on disk easier to find.
+
+`attach` returns `true` on success. It returns `false` and prints a `[raider_reporter]` warning, never raising, if it is called outside a running example (for instance when the formatter is not loaded), if the file does not exist, or if the file is larger than 5 MB.
 
 ## Configuration
 

@@ -41,6 +41,43 @@ RSpec.describe "RaiderReporter.attach" do
     end
   end
 
+  def finish(collector)
+    collector.finish_test(identifier: "i", full_name: "n", file_path: "f", line_number: 1,
+                          status: "failed", duration_ms: 1, attempts: 1, tags: [], failure: nil)
+  end
+
+  it "copies the file at attach time so a reused path keeps each example's bytes" do
+    collector = RaiderReporter.start_collector!
+    collector.start_run
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "failure.png")
+      results = %w[first second].map do |bytes|
+        collector.start_test
+        File.binwrite(path, bytes)
+        RaiderReporter.attach("screenshot", path, type: :png)
+        finish(collector)
+      end
+      sources = results.map { |r| r.attachments.first.source_path }
+      expect(sources.map { |s| File.binread(s) }).to eq(%w[first second])
+      expect(sources.map { |s| File.basename(s) }).to eq(%w[failure.png failure.png])
+      expect(sources).not_to include(path)
+    end
+  end
+
+  it "returns false and warns when the file is larger than max_attachment_bytes" do
+    RaiderReporter.configuration.max_attachment_bytes = 3
+    collector = RaiderReporter.start_collector!
+    collector.start_run
+    collector.start_test
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "big.png")
+      File.binwrite(path, "four")
+      expect(RaiderReporter.attach("screenshot", path, type: :png)).to be(false)
+      expect(err.string).to include("big.png").and include("larger than 3 bytes")
+      expect(finish(collector).attachments).to be_empty
+    end
+  end
+
   it "maps explicit types" do
     expect(RaiderReporter::ContentTypes.resolve(:png, "a.bin")).to eq("image/png")
     expect(RaiderReporter::ContentTypes.resolve(:video, "a.mov")).to eq("video/quicktime")

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "securerandom"
+require "tmpdir"
+require "fileutils"
 
 module RaiderReporter
   # Accumulates one suite run. Framework formatters call it; writers read the Run it returns.
@@ -12,6 +14,7 @@ module RaiderReporter
       @uuid = uuid
       @results = []
       @pending_attachments = nil
+      @staged = 0
     end
 
     def start_run
@@ -32,6 +35,23 @@ module RaiderReporter
 
       @pending_attachments << attachment
       true
+    end
+
+    # Copies a file into a collector-owned staging dir so later writes to the
+    # same path (a reused screenshot name) cannot change what this example sent.
+    def stage(path)
+      @staging_dir ||= Dir.mktmpdir("raider_reporter")
+      dir = File.join(@staging_dir, @staged.to_s)
+      @staged += 1
+      FileUtils.mkdir_p(dir)
+      copy = File.join(dir, File.basename(path))
+      FileUtils.cp(path, copy)
+      copy
+    end
+
+    def cleanup
+      FileUtils.rm_rf(@staging_dir) if @staging_dir
+      @staging_dir = nil
     end
 
     def finish_test(**fields)

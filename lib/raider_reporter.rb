@@ -25,6 +25,7 @@ module RaiderReporter
     end
 
     def reset!
+      @collector&.cleanup
       @configuration = nil
       @collector = nil
     end
@@ -46,8 +47,17 @@ module RaiderReporter
         return false
       end
 
-      collector.attach(Attachment.new(name: name.to_s, source_path: File.expand_path(path.to_s),
+      limit = configuration.max_attachment_bytes
+      if File.size(path.to_s) > limit
+        warn("attach(#{name.inspect}): file #{path} is larger than #{limit} bytes; ignored")
+        return false
+      end
+
+      collector.attach(Attachment.new(name: name.to_s, source_path: collector.stage(path.to_s),
                                       content_type: ContentTypes.resolve(type, path)))
+    rescue StandardError => e
+      warn("attach(#{name.inspect}) failed: #{e.class}: #{e.message}")
+      false
     end
 
     def warn(message)
@@ -72,6 +82,8 @@ module RaiderReporter
         warn("upload failed: #{result.error}")
       end
       nil
+    ensure
+      collector&.cleanup
     end
 
     private
