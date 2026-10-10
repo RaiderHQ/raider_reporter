@@ -65,6 +65,8 @@ module RaiderReporter
     end
 
     def finish!(output = $stdout)
+      return nil if dry_run?
+
       detector = CiDetector.new
       run = collector.finish_run(ci: detector.ci, git: detector.git, environment: default_environment)
       payload = Payload.new(run)
@@ -87,6 +89,12 @@ module RaiderReporter
     end
 
     private
+
+    # `rspec --dry-run` reports every example as passed without running it.
+    def dry_run?
+      defined?(::RSpec.configuration) && ::RSpec.configuration.respond_to?(:dry_run?) &&
+        ::RSpec.configuration.dry_run?
+    end
 
     def default_environment
       { "ruby" => RUBY_VERSION, "os" => RbConfig::CONFIG["host_os"] }

@@ -26,7 +26,7 @@ Enable the formatter in `.rspec`:
 --format RaiderReporter::RSpec::Formatter
 ```
 
-Run `bundle exec rspec` as usual. Results land in `raider-results/run.json`.
+Run `bundle exec rspec` as usual. Results land in `raider-results/run.json`. A dry run (`rspec --dry-run`) writes and uploads nothing.
 
 ## Attaching screenshots and videos
 

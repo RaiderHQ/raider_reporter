@@ -7,13 +7,13 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
   let(:lib_dir) { File.expand_path("../../../lib", __dir__) }
   let(:fixture) { File.expand_path("../../fixtures/sample_suite/sample_spec.rb", __dir__) }
 
-  def run_suite(dir, extra_env = {})
+  def run_suite(dir, extra_env = {}, extra_args = [])
     FileUtils.cp(fixture, File.join(dir, "sample_spec.rb"))
     env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil }.merge(extra_env)
     Open3.capture2e(
       env, RbConfig.ruby, "-I", lib_dir, Gem.bin_path("rspec-core", "rspec"),
       "--require", "raider_reporter/rspec", "--format", "progress",
-      "--format", "RaiderReporter::RSpec::Formatter", "sample_spec.rb",
+      "--format", "RaiderReporter::RSpec::Formatter", *extra_args, "sample_spec.rb",
       chdir: dir
     )
   end
@@ -50,6 +50,15 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
       output, status = run_suite(dir)
       expect(status.exitstatus).to eq(1)
       expect(output).to include("[raider_reporter]")
+    end
+  end
+
+  it "writes and uploads nothing on a dry run" do
+    Dir.mktmpdir do |dir|
+      output, status = run_suite(dir, {}, ["--dry-run"])
+      expect(status.exitstatus).to eq(0), output
+      expect(File).not_to exist(File.join(dir, "raider-results", "run.json"))
+      expect(output).not_to include("[raider_reporter]")
     end
   end
 end
