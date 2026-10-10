@@ -23,4 +23,8 @@ RSpec.describe "Sample" do
 
   xit "is skipped" do
   end
+
+  it "fails with an invalid UTF-8 message" do
+    raise "bad \xff bytes".b
+  end
 end

@@ -28,7 +28,7 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
 
       expect(json["schema_version"]).to eq(1)
       expect(json["client_run_id"]).to match(/\A[0-9a-f-]{36}\z/)
-      expect(results.map { |r| r["status"] }).to eq(%w[passed failed passed pending skipped])
+      expect(results.map { |r| r["status"] }).to eq(%w[passed failed passed pending skipped failed])
       expect(results[0]["tags"]).to eq(["smoke"])
       expect(results[0]["file_path"]).to eq("sample_spec.rb")
       expect(results[0]["identifier"]).to eq("./sample_spec.rb[1:1]")
@@ -40,6 +40,7 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
       expect(File).to exist(File.join(dir, "raider-results", "attachments", "0-shot.png"))
       expect(results[2]["attempts"]).to eq(2)
       expect(results.map { |r| r["full_name"] }).to include("Sample passes")
+      expect(results[5]["failure"]["message"]).to eq("bad ? bytes")
     end
   end
 

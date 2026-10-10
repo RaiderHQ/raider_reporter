@@ -55,7 +55,7 @@ module RaiderReporter
         execution = example.execution_result
         @collector.finish_test(
           identifier: example.id,
-          full_name: example.full_description,
+          full_name: utf8(example.full_description),
           file_path: metadata[:file_path].to_s.delete_prefix("./"),
           line_number: metadata[:line_number],
           status: status,
@@ -71,10 +71,20 @@ module RaiderReporter
 
         backtrace = ::RSpec.configuration.backtrace_formatter.format_backtrace(exception.backtrace || [])
         Failure.new(
-          message: exception.message.to_s[0, MAX_MESSAGE],
-          exception_class: exception.class.name,
-          backtrace: backtrace.first(MAX_BACKTRACE)
+          message: utf8(exception.message)[0, MAX_MESSAGE],
+          exception_class: utf8(exception.class.name),
+          backtrace: backtrace.first(MAX_BACKTRACE).map { |line| utf8(line) }
         )
+      end
+
+      # JSON generation raises on invalid UTF-8, which would lose the whole run.
+      def utf8(value)
+        str = value.to_s
+        if [Encoding::UTF_8, Encoding::BINARY, Encoding::US_ASCII].include?(str.encoding)
+          str.dup.force_encoding(Encoding::UTF_8).scrub("?")
+        else
+          str.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: "?")
+        end
       end
 
       def guard
