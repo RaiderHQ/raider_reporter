@@ -1,0 +1,12 @@
+# Add to your workflow after setting the RAIDER_TOKEN secret (Project settings → API tokens).
+- name: Run tests
+  env:
+    RAIDER_TOKEN: ${{ secrets.RAIDER_TOKEN }}
+    RAIDER_ENDPOINT: ${{ vars.RAIDER_ENDPOINT }}
+  run: bundle exec rspec
+- name: Keep local results
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: raider-results
+    path: raider-results/

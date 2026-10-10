@@ -2,3 +2,5 @@
 /raider-results/
 /Gemfile.lock
 *.gem
+/examples/rspec_basic/raider-results/
+/examples/rspec_basic/Gemfile.lock
