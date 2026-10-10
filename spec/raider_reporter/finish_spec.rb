@@ -48,4 +48,18 @@ RSpec.describe "RaiderReporter.finish!" do
     expect(a_request(:any, /raider.test/)).not_to have_been_made
     expect(File).to exist(File.join(RaiderReporter.configuration.output_dir, "run.json"))
   end
+
+  it "prints the run id when the server returns no url" do
+    stub_request(:post, "https://raider.test/api/v1/runs").to_return(status: 201, body: { run_id: 9 }.to_json)
+    run_one_test
+    RaiderReporter.finish!(out)
+    expect(out.string).to eq("Raider report uploaded (run 9)\n")
+  end
+
+  it "prints a plain confirmation when the server returns neither url nor run id" do
+    stub_request(:post, "https://raider.test/api/v1/runs").to_return(status: 201, body: "{}")
+    run_one_test
+    RaiderReporter.finish!(out)
+    expect(out.string).to eq("Raider report uploaded\n")
+  end
 end

@@ -86,4 +86,11 @@ RSpec.describe "RaiderReporter.attach" do
     expect(RaiderReporter::ContentTypes.resolve(nil, "a.json")).to eq("application/json")
     expect(RaiderReporter::ContentTypes.resolve(nil, "a.zzz")).to eq("application/octet-stream")
   end
+
+  it "ignores content-type strings that are not a plain type/subtype" do
+    expect(RaiderReporter::ContentTypes.resolve("", "a.zzz")).to eq("application/octet-stream")
+    expect(RaiderReporter::ContentTypes.resolve("", "a.png")).to eq("image/png")
+    expect(RaiderReporter::ContentTypes.resolve("text/plain\r\nX: y", "a.zzz")).to eq("application/octet-stream")
+    expect(RaiderReporter::ContentTypes.resolve("image/svg+xml", "a")).to eq("image/svg+xml")
+  end
 end

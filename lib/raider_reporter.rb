@@ -79,7 +79,7 @@ module RaiderReporter
 
       result = Writers::Uploader.new(configuration).upload(payload)
       if result.ok
-        output.puts("Raider report: #{result.url}")
+        output.puts(success_line(result))
       else
         warn("upload failed: #{result.error}")
       end
@@ -89,6 +89,13 @@ module RaiderReporter
     end
 
     private
+
+    def success_line(result)
+      return "Raider report: #{result.url}" if result.url
+      return "Raider report uploaded (run #{result.run_id})" if result.run_id
+
+      "Raider report uploaded"
+    end
 
     # `rspec --dry-run` reports every example as passed without running it.
     def dry_run?

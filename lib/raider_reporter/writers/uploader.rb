@@ -8,7 +8,7 @@ require "securerandom"
 module RaiderReporter
   module Writers
     class Uploader
-      Result = Data.define(:ok, :url, :error)
+      Result = Data.define(:ok, :url, :run_id, :error)
       # Keeps uploads under the server's 50 MB request limit and multipart part limit.
       MAX_UPLOAD_ATTACHMENT_BYTES = 45 * 1024 * 1024
       MAX_UPLOAD_ATTACHMENTS = 1000
@@ -36,12 +36,13 @@ module RaiderReporter
         request["Content-Type"] = "multipart/form-data; boundary=#{boundary}"
 
         response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                       open_timeout: @timeout, read_timeout: @timeout) do |http|
+                                                       open_timeout: @timeout, read_timeout: @timeout,
+                                                       write_timeout: @timeout) do |http|
           http.request(request)
         end
         to_result(response)
       rescue StandardError => e
-        Result.new(ok: false, url: nil, error: "#{e.class}: #{e.message}")
+        Result.new(ok: false, url: nil, run_id: nil, error: "#{e.class}: #{e.message}")
       end
 
       private
@@ -76,7 +77,7 @@ module RaiderReporter
       end
 
       def add_file(body, boundary, name, attachment)
-        filename = File.basename(attachment.source_path).delete("\"\r\n")
+        filename = File.basename(attachment.source_path).gsub(/[^\w.\-]/, "_")
         body << ("--#{boundary}\r\nContent-Disposition: form-data; name=\"#{name}\"; filename=\"#{filename}\"\r\n" \
                  "Content-Type: #{attachment.content_type}\r\n\r\n").b
         body << File.binread(attachment.source_path) << "\r\n".b
@@ -91,10 +92,22 @@ module RaiderReporter
 
       def to_result(response)
         if response.is_a?(Net::HTTPSuccess)
-          Result.new(ok: true, url: JSON.parse(response.body.to_s)["url"], error: nil)
+          body = parse_body(response.body)
+          Result.new(ok: true, url: present(body["url"]), run_id: present(body["run_id"]), error: nil)
         else
-          Result.new(ok: false, url: nil, error: "HTTP #{response.code}: #{response.body.to_s[0, 200]}")
+          Result.new(ok: false, url: nil, run_id: nil, error: "HTTP #{response.code}: #{response.body.to_s[0, 200]}")
         end
+      end
+
+      def parse_body(text)
+        parsed = JSON.parse(text.to_s)
+        parsed.is_a?(Hash) ? parsed : {}
+      rescue JSON::ParserError
+        {}
+      end
+
+      def present(value)
+        value.nil? || value.to_s.strip.empty? ? nil : value
       end
     end
   end

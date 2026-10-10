@@ -120,4 +120,45 @@ RSpec.describe RaiderReporter::Writers::Uploader do
     config.endpoint = "localhost:3000"
     Dir.mktmpdir { |dir| expect(described_class.new(config).upload(payload(dir)).ok).to be(false) }
   end
+
+  it "applies the timeout to connect, write and read" do
+    stub_request(:post, url).to_return(status: 201, body: { run_id: 1, url: "u" }.to_json)
+    options = nil
+    allow(Net::HTTP).to receive(:start).and_wrap_original do |original, *args, **kwargs, &block|
+      options = kwargs
+      original.call(*args, **kwargs, &block)
+    end
+    Dir.mktmpdir { |dir| described_class.new(config, timeout: 7).upload(payload(dir)) }
+    expect(options).to include(open_timeout: 7, read_timeout: 7, write_timeout: 7)
+  end
+
+  it "sanitizes the multipart filename" do
+    stub_request(:post, url).to_return(status: 201, body: { run_id: 1, url: "u" }.to_json)
+    Dir.mktmpdir do |dir|
+      src = File.join(dir, "we\\ird\"na me;.png")
+      File.binwrite(src, "PNG")
+      att = RaiderReporter::Attachment.new(name: "s", source_path: src, content_type: "image/png")
+      run = payload(dir).run
+      run = run.with(results: [run.results.first.with(attachments: [att])])
+      described_class.new(config).upload(RaiderReporter::Payload.new(run))
+    end
+    expect(a_request(:post, url).with { |req| req.body.include?('filename="we_ird_na_me_.png"') })
+      .to have_been_made.once
+  end
+
+  it "reports run_id when a 2xx response has no url" do
+    stub_request(:post, url).to_return(status: 201, body: { run_id: 4 }.to_json)
+    Dir.mktmpdir do |dir|
+      result = described_class.new(config).upload(payload(dir))
+      expect([result.ok, result.url, result.run_id]).to eq([true, nil, 4])
+    end
+  end
+
+  it "treats a 2xx response with a non-JSON body as success" do
+    stub_request(:post, url).to_return(status: 201, body: "ok")
+    Dir.mktmpdir do |dir|
+      result = described_class.new(config).upload(payload(dir))
+      expect([result.ok, result.url, result.run_id]).to eq([true, nil, nil])
+    end
+  end
 end
