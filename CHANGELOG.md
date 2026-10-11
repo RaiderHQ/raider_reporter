@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-10-11
 
 - RSpec formatter writing Raider schema v1 to `raider-results/run.json`
 - Screenshot and video attachments via `RaiderReporter.attach`, copied when attached (5 MB limit per file)
