@@ -61,10 +61,10 @@ module RaiderReporter
       result
     end
 
-    def finish_run(ci:, git:, environment:)
+    def finish_run(ci:, git:, environment:, shard: nil)
       Run.new(
         client_run_id: @uuid.call, started_at: @started_at, finished_at: @clock.call,
-        ci: ci, git: git, environment: environment,
+        ci: ci, git: git, environment: environment, shard: shard,
         results: @results.map { |r| r.with(attachments: r.attachments.select { |a| keep?(a) }) }
       )
     end

@@ -28,12 +28,18 @@ module RaiderReporter
       }
     end
 
+    def shard_index = @run.shard&.fetch("index")
+
+    def attachments_dir = shard_index ? "attachments-#{shard_index}" : "attachments"
+
+    def run_file = shard_index ? "run-#{shard_index}.json" : "run.json"
+
     def attachment_entries
       @attachment_entries ||= @run.results.flat_map(&:attachments).each_with_index.map do |attachment, index|
         {
           attachment: attachment,
           part: "att_#{index}",
-          path: "attachments/#{index}-#{File.basename(attachment.source_path)}"
+          path: "#{attachments_dir}/#{index}-#{File.basename(attachment.source_path)}"
         }
       end
     end
@@ -46,7 +52,8 @@ module RaiderReporter
         "finished_at" => @run.finished_at&.utc&.iso8601(3),
         "ci" => @run.ci,
         "git" => @run.git,
-        "environment" => @run.environment
+        "environment" => @run.environment,
+        "shard" => @run.shard
       }.compact
     end
 

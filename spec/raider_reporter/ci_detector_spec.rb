@@ -18,8 +18,25 @@ RSpec.describe RaiderReporter::CiDetector do
             "GITHUB_REF_NAME" => "main", "GITHUB_HEAD_REF" => "", "GITHUB_SHA" => "abc" }
     detector = described_class.new(env: env, git: git)
     expect(detector.ci).to eq("provider" => "github_actions",
-                              "build_url" => "https://github.com/RaiderHQ/demo/actions/runs/42", "build_id" => "42")
+                              "build_url" => "https://github.com/RaiderHQ/demo/actions/runs/42", "build_id" => "42",
+                              "attempt" => "1", "build_key" => "github_actions:RaiderHQ/demo:42:1")
     expect(detector.git).to eq("branch" => "main", "commit_sha" => "abc", "commit_message" => "Local commit")
+  end
+
+  it "adds attempt, job and a build key on GitHub Actions" do
+    env = { "GITHUB_ACTIONS" => "true", "GITHUB_SERVER_URL" => "https://github.com",
+            "GITHUB_REPOSITORY" => "RaiderHQ/demo", "GITHUB_RUN_ID" => "42", "GITHUB_RUN_ATTEMPT" => "2",
+            "GITHUB_JOB" => "rspec", "GITHUB_SHA" => "abc" }
+    ci = described_class.new(env: env, git: git).ci
+    expect(ci).to include("attempt" => "2", "job" => "rspec",
+                          "build_key" => "github_actions:RaiderHQ/demo:42:2")
+  end
+
+  it "defaults the attempt to 1 and omits the build key without a run id" do
+    with_attempt = described_class.new(env: { "GITHUB_ACTIONS" => "true", "GITHUB_REPOSITORY" => "R/d", "GITHUB_RUN_ID" => "7" }, git: git).ci
+    expect(with_attempt["build_key"]).to eq("github_actions:R/d:7:1")
+    without_id = described_class.new(env: { "GITHUB_ACTIONS" => "true" }, git: git).ci
+    expect(without_id).not_to have_key("build_key")
   end
 
   it "uses the PR head branch on pull_request events" do

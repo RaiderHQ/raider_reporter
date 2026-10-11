@@ -18,7 +18,7 @@ RSpec.describe RaiderReporter::Writers::Uploader do
                                             failure: nil, attachments: [att])
     RaiderReporter::Payload.new(RaiderReporter::Run.new(client_run_id: "u", started_at: Time.now.utc,
                                                          finished_at: Time.now.utc, ci: nil, git: nil,
-                                                         environment: {}, results: [result]))
+                                                         environment: {}, results: [result], shard: nil))
   end
 
   def multi_payload(dir, sizes_per_result)
@@ -35,7 +35,7 @@ RSpec.describe RaiderReporter::Writers::Uploader do
     end
     RaiderReporter::Payload.new(RaiderReporter::Run.new(client_run_id: "u", started_at: Time.now.utc,
                                                          finished_at: Time.now.utc, ci: nil, git: nil,
-                                                         environment: {}, results: results))
+                                                         environment: {}, results: results, shard: nil))
   end
 
   def uploaded_payload_json
@@ -160,5 +160,35 @@ RSpec.describe RaiderReporter::Writers::Uploader do
       result = described_class.new(config).upload(payload(dir))
       expect([result.ok, result.url, result.run_id]).to eq([true, nil, nil])
     end
+  end
+
+  it "reads the build url from the response" do
+    body = { run_id: 1, url: "https://r/runs/1", build: { id: 5, url: "https://r/builds/5" } }
+    stub_request(:post, url).to_return(status: 201, body: body.to_json)
+    Dir.mktmpdir do |dir|
+      expect(described_class.new(config).upload(payload(dir)).build_url).to eq("https://r/builds/5")
+    end
+  end
+
+  it "has a nil build_url when the response has no build" do
+    stub_request(:post, url).to_return(status: 201, body: { run_id: 1, url: "https://r/runs/1" }.to_json)
+    Dir.mktmpdir do |dir|
+      expect(described_class.new(config).upload(payload(dir)).build_url).to be_nil
+    end
+  end
+
+  it "has a nil build_url, without raising, when build is not an object" do
+    ["garbage", [1], 7].each do |value|
+      stub_request(:post, url).to_return(status: 201, body: { run_id: 1, build: value }.to_json)
+      Dir.mktmpdir do |dir|
+        result = described_class.new(config).upload(payload(dir))
+        expect([result.ok, result.build_url]).to eq([true, nil])
+      end
+    end
+  end
+
+  it "has a nil build_url on failure" do
+    stub_request(:post, url).to_return(status: 500, body: "")
+    Dir.mktmpdir { |dir| expect(described_class.new(config).upload(payload(dir)).build_url).to be_nil }
   end
 end

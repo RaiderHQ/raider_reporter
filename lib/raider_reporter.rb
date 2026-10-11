@@ -10,6 +10,7 @@ require_relative "raider_reporter/content_types"
 require_relative "raider_reporter/collector"
 require_relative "raider_reporter/writers/local"
 require_relative "raider_reporter/ci_detector"
+require_relative "raider_reporter/shard_detector"
 require_relative "raider_reporter/writers/uploader"
 
 module RaiderReporter
@@ -69,7 +70,9 @@ module RaiderReporter
       return nil if dry_run?
 
       detector = CiDetector.new
-      run = collector.finish_run(ci: detector.ci, git: detector.git, environment: default_environment)
+      ci = detector.ci
+      shard = ShardDetector.new(job: ci&.fetch("job", nil)).shard
+      run = collector.finish_run(ci: ci, git: detector.git, environment: default_environment, shard: shard)
       payload = Payload.new(run)
       begin
         Writers::Local.new(configuration).write(payload)
@@ -92,7 +95,8 @@ module RaiderReporter
     private
 
     def success_line(result)
-      return "Raider report: #{result.url}" if result.url
+      link = result.build_url || result.url
+      return "Raider report: #{link}" if link
       return "Raider report uploaded (run #{result.run_id})" if result.run_id
 
       "Raider report uploaded"
