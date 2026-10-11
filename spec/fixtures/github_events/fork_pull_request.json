@@ -1,0 +1,10 @@
+{
+  "action": "opened",
+  "number": 12,
+  "pull_request": {
+    "number": 12,
+    "base": { "ref": "main", "sha": "base333" },
+    "head": { "ref": "patch-1", "sha": "forksha444", "repo": { "full_name": "contributor/demo", "fork": true } }
+  },
+  "repository": { "full_name": "RaiderHQ/demo", "default_branch": "main" }
+}

@@ -1,12 +1,16 @@
 # frozen_string_literal: true
 
 require "open3"
+require "raider_reporter/github_event"
 
 module RaiderReporter
   class CiDetector
-    def initialize(env: ENV, git: method(:git_command))
+    PR_EVENTS = %w[pull_request pull_request_target].freeze
+
+    def initialize(env: ENV, git: method(:git_command), event_reader: nil)
       @env = env
       @git = git
+      @event_reader = event_reader || -> { GithubEvent.load(@env) }
     end
 
     def ci
@@ -20,16 +24,68 @@ module RaiderReporter
       repo = @env["GITHUB_REPOSITORY"]
       build_key = ("github_actions:#{repo}:#{run_id}:#{attempt}" if repo && run_id)
       { "provider" => "github_actions", "build_url" => build_url, "build_id" => run_id,
-        "attempt" => attempt, "job" => @env["GITHUB_JOB"], "build_key" => build_key }.compact
+        "attempt" => attempt, "job" => @env["GITHUB_JOB"], "build_key" => build_key,
+        "repository" => (repo unless repo.to_s.empty?) }.compact
     end
 
     def git
-      info = { "branch" => branch, "commit_sha" => sha, "commit_message" => @git.call("log", "-1", "--pretty=%s") }
+      pr = pull_request
+      info = { "branch" => branch, "commit_sha" => pr ? pr["head_sha"] : sha, "commit_message" => commit_message(pr),
+               "default_branch" => default_branch, "pr" => pr }
       info = info.compact
       info.empty? ? nil : info
     end
 
     private
+
+    def event
+      return @event if defined?(@event)
+
+      loaded = begin
+        @event_reader.call
+      rescue StandardError
+        nil
+      end
+      @event = loaded.is_a?(Hash) ? loaded : nil
+    end
+
+    def default_branch
+      value = event&.dig("repository", "default_branch")
+      value.is_a?(String) && !value.empty? ? value : nil
+    rescue StandardError
+      nil
+    end
+
+    def pull_request
+      return nil unless event && PR_EVENTS.include?(@env["GITHUB_EVENT_NAME"])
+
+      pr = event["pull_request"]
+      return nil unless pr.is_a?(Hash)
+
+      number = pr["number"] || event["number"]
+      base = pr.dig("base", "ref")
+      head = pr.dig("head", "ref")
+      sha = pr.dig("head", "sha")
+      return nil unless number.is_a?(Integer) && number >= 1
+      return nil unless [base, head, sha].all? { |v| v.is_a?(String) && !v.empty? }
+
+      { "number" => number, "base_branch" => base, "head_branch" => head, "head_sha" => sha }
+    rescue StandardError
+      nil
+    end
+
+    # On a PR, GitHub checks out a synthetic merge commit; its message is not the author's.
+    def commit_message(pr)
+      if pr && merge_commit?
+        message = @git.call("log", "-1", "--format=%s", "HEAD^2")
+        return message unless message.to_s.empty?
+      end
+      @git.call("log", "-1", "--pretty=%s")
+    end
+
+    def merge_commit?
+      @git.call("rev-list", "--parents", "-n", "1", "HEAD").to_s.split.size == 3
+    end
 
     def branch
       head_ref = @env["GITHUB_HEAD_REF"].to_s
