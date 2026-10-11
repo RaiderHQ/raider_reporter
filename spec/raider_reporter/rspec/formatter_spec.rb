@@ -9,7 +9,7 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
 
   def run_suite(dir, extra_env = {}, extra_args = [])
     FileUtils.cp(fixture, File.join(dir, "sample_spec.rb"))
-    env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil }.merge(extra_env)
+    env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "GITHUB_ACTIONS" => nil, "GITHUB_JOB" => nil }.merge(extra_env)
     Open3.capture2e(
       env, RbConfig.ruby, "-I", lib_dir, Gem.bin_path("rspec-core", "rspec"),
       "--require", "raider_reporter/rspec", "--format", "progress",
@@ -70,7 +70,7 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
 
       [1, 2].each do |i|
         json = JSON.parse(File.read(File.join(out, "run-#{i}.json")))
-        expect(json["run"]["shard"]).to include("index" => i, "total" => 2, "label" => a_string_ending_with("#1.#{i}"))
+        expect(json["run"]["shard"]).to include("index" => i, "total" => 2, "label" => "local#1.#{i}")
         expect(File).to exist(File.join(out, "attachments-#{i}", "0-shot.png"))
       end
     end

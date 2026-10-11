@@ -146,7 +146,7 @@ A GitHub matrix leg can also run `parallel_rspec -n 2`. When `RAIDER_SHARD_INDEX
 - `total = RAIDER_SHARD_TOTAL * g`
 - `label = "<job>#<RAIDER_SHARD_INDEX>.<parallel_index>"`
 
-For example, matrix leg 2 of 2 with `parallel_rspec -n 2` yields shards 3 and 4 of 4, labelled `#2.1` and `#2.2`. `RAIDER_SHARD_TOTAL` must match the matrix size. Without it, `total` is null. If `PARALLEL_TEST_GROUPS` is missing or invalid, only `RAIDER_SHARD_INDEX` is used.
+For example, matrix leg 2 of 2 with `parallel_rspec -n 2` yields shards 3 and 4 of 4, labelled `#2.1` and `#2.2`. `RAIDER_SHARD_TOTAL` must match the matrix size. Without it, `total` is null. If `PARALLEL_TEST_GROUPS` is missing or invalid, only `RAIDER_SHARD_INDEX` is used. Every matrix leg must use the same parallel_tests process count (`-n`) and set `RAIDER_SHARD_TOTAL`; mixing different `-n` values, or composed and plain legs, can repeat shard numbers.
 
 Tip: run `rm -rf raider-results` before a parallel run. Each process only cleans its own files, so files from an earlier run with more processes stay behind.
 
