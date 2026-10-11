@@ -37,6 +37,8 @@ module RaiderReporter
       end
 
       def set_status(sha, state:, target_url:, description:, context:)
+        return nil if sha.to_s.strip.empty?
+
         payload = { state: state, target_url: target_url, context: context,
                     description: description.to_s[0, DESCRIPTION_LIMIT] }
         request(:post, "/repos/#{@repository}/statuses/#{sha}", payload: payload)

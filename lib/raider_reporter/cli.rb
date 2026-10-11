@@ -85,7 +85,7 @@ module RaiderReporter
       url.empty? ? DEFAULT_API_URL : url
     end
 
-    # "Raider: 2 failed, 148 passed, 3 skipped (4/4 shards) — 1m 12s" -> "2 failed, 148 passed, 3 skipped".
+    # "**Raider: failed** - 2 failed, 148 passed, 3 skipped (1m 12s)" -> "2 failed, 148 passed, 3 skipped".
     # Falls back to a fixed text per state when the Markdown carries no headline counts.
     def description(summary)
       counts = headline_counts(summary.markdown)
@@ -94,12 +94,11 @@ module RaiderReporter
     end
 
     def headline_counts(markdown)
-      line = markdown.to_s.lines.map(&:strip).find { |l| l.match?(/\A\W*Raider:\s*\d+ \w+/) }
+      line = markdown.to_s.lines.find { |l| l.include?("Raider:") }
       return nil unless line
 
-      parts = line.sub(/\A\W*Raider:\s*/, "").split(/\s+[(—–-]/, 2).first.to_s.split(",").map(&:strip)
-      parts = parts.grep(/\A\d+ [a-z]+\z/i)
-      parts.empty? ? nil : parts.join(", ")
+      counts = line.scan(/\b\d+ (?:failed|passed|skipped|pending)\b/)
+      counts.empty? ? nil : counts.join(", ")
     end
 
     def notice(message)

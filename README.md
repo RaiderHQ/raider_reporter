@@ -94,7 +94,7 @@ The hosted Raider service is not public yet; uploads go to a Raider server whose
 
 ## Pull request comments
 
-On pull requests, `raider-reporter comment` posts one comment with the build's results (and sets a `raider/tests` commit status on the PR head commit). Run it in a job that runs after your test jobs, so every shard has uploaded:
+On pull requests, `raider-reporter comment` posts one comment with the build's results (and sets a `raider/tests` commit status on the PR head commit). Run it in a job that runs after your test jobs, so every shard has uploaded. Use the workflow's `GITHUB_TOKEN` (or a GitHub App token): a personal access token posts as a user, so the step adds a new comment on every run instead of updating the existing one.
 
 ```yaml
   raider-comment:

@@ -67,6 +67,13 @@ RSpec.describe RaiderReporter::Comment::GithubClient do
     expect(stub).to have_been_requested
   end
 
+  it "does nothing for a blank or nil sha" do
+    [nil, "", "  "].each do |sha|
+      expect(client.set_status(sha, state: "success", target_url: "u", description: "d", context: "c")).to be_nil
+    end
+    expect(a_request(:any, /.*/)).not_to have_been_made
+  end
+
   describe "hardening" do
     def post_stub(html = "https://gh/c/new")
       stub_request(:post, "#{base}/issues/7/comments").to_return(status: 201, body: { html_url: html }.to_json)

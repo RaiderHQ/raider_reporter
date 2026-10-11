@@ -3,6 +3,7 @@
 require "webmock/rspec"
 require "open3"
 require "stringio"
+require "tmpdir"
 require "raider_reporter"
 require "raider_reporter/cli"
 
@@ -17,7 +18,7 @@ RSpec.describe RaiderReporter::CLI do
   let(:out) { StringIO.new }
   let(:err) { StringIO.new }
   let(:argv) { ["comment"] }
-  let(:markdown) { "<!-- raider-reporter:build-comment -->\nRaider: 2 failed, 148 passed, 3 skipped (4/4 shards) — 1m 12s\n" }
+  let(:markdown) { "<!-- raider-reporter:build-comment -->\n**Raider: failed** - 2 failed, 148 passed, 3 skipped (1m 12s)\n" }
   let(:state) { "failed" }
   let(:gh) { "https://api.github.test/repos/RaiderHQ/demo" }
 
@@ -111,8 +112,27 @@ RSpec.describe RaiderReporter::CLI do
     expect(status).to have_been_requested
   end
 
+  it "falls back to fixed text when the headline has no counts" do
+    stub_summary(markdown: "<!-- raider-reporter:build-comment -->\n**Raider: failed** - build incomplete (1m 12s)\n")
+    stub_comment
+    status = stub_status.with(body: hash_including("description" => "Raider: tests failed"))
+    run_cli
+    expect(status).to have_been_requested
+  end
+
+  it "skips a pull_request event without a head sha, exits 0 and makes no HTTP calls" do
+    event = JSON.parse(File.read(File.join(fixtures, "pull_request.json")))
+    event["pull_request"]["head"].delete("sha")
+    path = File.join(Dir.mktmpdir, "event.json")
+    File.write(path, event.to_json)
+    env["GITHUB_EVENT_PATH"] = path
+    expect(run_cli).to eq(0)
+    expect(err.string).to eq("[raider_reporter] skipped: not a pull request event\n")
+    expect(a_request(:any, /.*/)).not_to have_been_made
+  end
+
   it "keeps the description within 140 characters" do
-    stub_summary(markdown: "Raider: #{(['1 failed'] * 40).join(', ')}\n")
+    stub_summary(markdown: "**Raider: failed** - #{(['1 failed'] * 40).join(', ')}\n")
     stub_comment
     status = stub_status.with { |req| JSON.parse(req.body)["description"].length <= 140 }
     run_cli

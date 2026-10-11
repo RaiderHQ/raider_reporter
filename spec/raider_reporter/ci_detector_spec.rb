@@ -94,6 +94,15 @@ RSpec.describe RaiderReporter::CiDetector do
                                         "head_sha" => "headsha222" })
     end
 
+    it "reports no pr when the event lacks the head sha or the head/base refs" do
+      [%w[head sha], %w[head ref], %w[base ref]].each do |side, key|
+        event = fixture("pull_request")
+        event["pull_request"][side].delete(key)
+        info = described_class.new(env: pr_env, git: git, event_reader: -> { event }).git
+        expect(info["pr"]).to be_nil, "expected no pr without #{side}.#{key}"
+      end
+    end
+
     it "reports the PR on pull_request_target and for fork PRs" do
       env = pr_env.merge("GITHUB_EVENT_NAME" => "pull_request_target", "GITHUB_HEAD_REF" => "patch-1")
       info = described_class.new(env: env, git: git, event_reader: -> { fixture("fork_pull_request") }).git
