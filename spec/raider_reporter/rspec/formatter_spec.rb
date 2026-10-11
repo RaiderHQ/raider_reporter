@@ -61,6 +61,21 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
     end
   end
 
+  it "keeps both processes' output when a matrix leg also runs parallel_tests" do
+    Dir.mktmpdir do |dir|
+      leg = { "RAIDER_SHARD_INDEX" => "1", "RAIDER_SHARD_TOTAL" => "1", "PARALLEL_TEST_GROUPS" => "2" }
+      run_suite(dir, leg.merge("TEST_ENV_NUMBER" => ""))
+      run_suite(dir, leg.merge("TEST_ENV_NUMBER" => "2"))
+      out = File.join(dir, "raider-results")
+
+      [1, 2].each do |i|
+        json = JSON.parse(File.read(File.join(out, "run-#{i}.json")))
+        expect(json["run"]["shard"]).to include("index" => i, "total" => 2, "label" => "local#1.#{i}")
+        expect(File).to exist(File.join(out, "attachments-#{i}", "0-shot.png"))
+      end
+    end
+  end
+
   it "never changes the exit status when the output dir cannot be written" do
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "raider-results"), "a file, not a directory")

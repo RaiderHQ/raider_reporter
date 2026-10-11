@@ -9,13 +9,25 @@ module RaiderReporter
     end
 
     def shard
-      index, total = explicit || parallel_tests
+      index, total, suffix = composed || explicit || parallel_tests
       return nil unless index
 
-      { "index" => index, "total" => total, "label" => "#{@job || "local"}##{index}" }
+      { "index" => index, "total" => total, "label" => "#{@job || "local"}##{suffix || index}" }
     end
 
     private
+
+    # A matrix leg that also runs parallel_tests: every process gets a unique index.
+    def composed
+      explicit_index, explicit_total = explicit
+      parallel_index, = parallel_tests
+      groups = positive(@env["PARALLEL_TEST_GROUPS"])
+      return nil unless explicit_index && parallel_index && groups
+
+      [(explicit_index - 1) * groups + parallel_index,
+       explicit_total && explicit_total * groups,
+       "#{explicit_index}.#{parallel_index}"]
+    end
 
     def explicit
       index = positive(@env["RAIDER_SHARD_INDEX"])

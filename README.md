@@ -74,7 +74,7 @@ raider-results/
   attachments/      # copies of attached screenshots and videos
 ```
 
-Add `raider-results/` to your `.gitignore`.
+Add `raider-results/` to your `.gitignore`. When a run is sharded, the files are named per shard; see [Parallel runs](#parallel-runs).
 
 ## Uploading to Raider
 
@@ -137,6 +137,18 @@ raider-results/
 ```
 
 Unsharded runs still write `run.json` and `attachments/`. Tools that read local results should load `run*.json`.
+
+### Matrix and parallel_tests together
+
+A GitHub matrix leg can also run `parallel_rspec -n 2`. When `RAIDER_SHARD_INDEX` and `TEST_ENV_NUMBER` are both present and `PARALLEL_TEST_GROUPS` is a positive integer `g`, the two are composed so every process gets a unique shard:
+
+- `index = (RAIDER_SHARD_INDEX - 1) * g + parallel_index`
+- `total = RAIDER_SHARD_TOTAL * g`
+- `label = "<job>#<RAIDER_SHARD_INDEX>.<parallel_index>"`
+
+For example, matrix leg 2 of 2 with `parallel_rspec -n 2` yields shards 3 and 4 of 4, labelled `#2.1` and `#2.2`. `RAIDER_SHARD_TOTAL` must match the matrix size. Without it, `total` is null. If `PARALLEL_TEST_GROUPS` is missing or invalid, only `RAIDER_SHARD_INDEX` is used.
+
+Tip: run `rm -rf raider-results` before a parallel run. Each process only cleans its own files, so files from an earlier run with more processes stay behind.
 
 ## Examples
 

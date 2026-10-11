@@ -47,7 +47,7 @@ Rules:
   `build_key` identifies the CI build that shards share; on GitHub Actions it
   is `github_actions:<repo>:<run id>:<run attempt>`. Absent outside CI. A
   re-run attempt has a different key, so it is a separate build.
-- `run.shard` is optional: `{ "index": <integer >= 1>, "total": <integer >= 1 or null>, "label": "<job or local>#<index>" }`.
+- `run.shard` is optional: `{ "index": <integer >= 1>, "total": <integer >= 1 or null>, "label": "<job or local>#<n>" or "<job or local>#<matrix>.<process>" }`.
   Present only for sharded runs.
 - `failure` is present only when `status == "failed"`.
 - `attempts` defaults to 1; read from `rspec-retry` metadata when present.
