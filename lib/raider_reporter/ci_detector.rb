@@ -16,7 +16,11 @@ module RaiderReporter
       build_url = if @env["GITHUB_SERVER_URL"] && @env["GITHUB_REPOSITORY"] && run_id
                     "#{@env['GITHUB_SERVER_URL']}/#{@env['GITHUB_REPOSITORY']}/actions/runs/#{run_id}"
                   end
-      { "provider" => "github_actions", "build_url" => build_url, "build_id" => run_id }.compact
+      attempt = @env["GITHUB_RUN_ATTEMPT"].to_s.empty? ? "1" : @env["GITHUB_RUN_ATTEMPT"]
+      repo = @env["GITHUB_REPOSITORY"]
+      build_key = ("github_actions:#{repo}:#{run_id}:#{attempt}" if repo && run_id)
+      { "provider" => "github_actions", "build_url" => build_url, "build_id" => run_id,
+        "attempt" => attempt, "job" => @env["GITHUB_JOB"], "build_key" => build_key }.compact
     end
 
     def git
