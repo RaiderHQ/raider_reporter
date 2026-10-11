@@ -57,14 +57,14 @@ You can also name the formatter explicitly:
 cucumber --format pretty --format RaiderReporter::Cucumber::Formatter --out raider-results/cucumber.log
 ```
 
-`--out` is required here. Cucumber 10 and newer reject a second formatter on the same output stream ("All but one formatter must use --out"), and this formatter writes nothing to its stream, so give it any file path (it is never created). If both modes are active, only one listener is registered.
+`--out` is required here. Cucumber rejects a second formatter on the same output stream ("All but one formatter must use --out", also in 9.2.1), and this formatter writes nothing to its stream, so give it any file path (it is never created). If both modes are active, only one listener is registered.
 
 ### How tests are identified
 
 - `file_path` is relative to the project root (`features/login.feature`), even when Cucumber is given `./features/login.feature` or an absolute path.
-- `full_name` is `"<Feature name>: <Scenario name>"`. Scenario Outline rows are `"<Feature name>: <Scenario name> (<Examples name or 'Examples'>, row <n>)"`, where `n` is the 1-based data row of that Examples table.
+- `full_name` is `"<Feature name>: <Scenario name>"`. Scenario Outline rows are `"<Feature name>: <Scenario name> (<Examples name or 'Examples'>, row <n>)"`, where `n` is the 1-based data row of that Examples table. When two or more Examples tables of one outline share a label (for example two unnamed ones), every table with that label is numbered by its position among them, `(Examples 1, row 1)`, `(Examples 2, row 1)`, so each row keeps a distinct name; tables with a unique label are unchanged.
 - `identifier` is `"<file_path>:<line>"`: the scenario line, or the Examples row line for outline rows.
-- Tags become the test's tags.
+- `tags` are the feature, scenario and Examples tags, merged, sorted, unique, without `@`.
 
 Statuses: passed, failed and ambiguous (reported as failed), pending and undefined (reported as pending), skipped.
 
@@ -97,7 +97,7 @@ end
 
 Cucumber's `attach` is captured only when given the path of an existing file. Inline data (`attach("some text", "text/plain")`) and `log` messages are ignored.
 
-### Parallel runs
+### Parallel runs with Cucumber
 
 `parallel_tests` works with no configuration for Cucumber too: each process writes `run-<n>.json`. See [Parallel runs](#parallel-runs).
 

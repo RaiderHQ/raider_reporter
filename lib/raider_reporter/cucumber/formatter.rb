@@ -22,9 +22,11 @@ module RaiderReporter
 
       # Passed to the World's `attach`; reports an existing file as an attachment.
       module AttachCapture
-        def attach(file, media_type = nil, filename = nil)
+        # Takes whatever Cucumber passes (file, media_type, filename, and any
+        # argument a later release adds) and forwards it untouched.
+        ruby2_keywords def attach(*args, &block)
           result = super
-          Formatter.record_attachment(file, media_type)
+          Formatter.record_attachment(args[0], args[1])
           result
         end
       end
@@ -165,12 +167,27 @@ module RaiderReporter
         case source&.type
         when :ScenarioOutline
           examples = source.examples
-          label = examples.name.to_s.strip.empty? ? "Examples" : examples.name.strip
           row = examples.table_body.index { |candidate| candidate.location.line == source.row.location.line }
-          row && "#{source.scenario_outline.name} (#{label}, row #{row + 1})"
+          row && "#{source.scenario_outline.name} (#{examples_label(source)}, row #{row + 1})"
         when :Scenario
           source.scenario.name
         end
+      end
+
+      # "Examples" or the table's name. When several tables of one outline share a
+      # label (two unnamed ones, say), each gets its 1-based position among them,
+      # so rows of different tables never collide on full_name.
+      def examples_label(source)
+        tables = source.scenario_outline.examples
+        label = examples_name(source.examples)
+        same = tables.select { |table| examples_name(table) == label }
+        return label if same.size < 2
+
+        "#{label} #{same.index { |table| table.equal?(source.examples) || table.location.line == source.examples.location.line } + 1}"
+      end
+
+      def examples_name(table)
+        table.name.to_s.strip.empty? ? "Examples" : table.name.strip
       end
 
       # step_info is { step:, result: } for the first non-passed step, if any.
@@ -219,6 +236,9 @@ module RaiderReporter
         absolute = Pathname.new(File.expand_path(path.to_s, Dir.pwd))
         relative = absolute.relative_path_from(Pathname.new(Dir.pwd)).to_s
         relative.start_with?("..") ? path.to_s.delete_prefix("./") : relative
+      rescue ArgumentError
+        # Windows: a path on another drive has no relative form.
+        path.to_s.delete_prefix("./")
       end
 
       def safely(fallback)

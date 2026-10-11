@@ -97,7 +97,8 @@ Cucumber results use the same fields; there is no schema change.
 | Field | Cucumber value |
 |---|---|
 | `file_path` | feature file relative to the project root, e.g. `features/login.feature` (also for `./` and absolute paths) |
-| `full_name` | `"<Feature name>: <Scenario name>"`; outline rows `"<Feature name>: <Scenario name> (<Examples name or 'Examples'>, row <n>)"`, `n` = 1-based data row in that Examples table |
+| `full_name` | `"<Feature name>: <Scenario name>"`; outline rows `"<Feature name>: <Scenario name> (<Examples name or 'Examples'>, row <n>)"`, `n` = 1-based data row in that Examples table; when several Examples tables of one outline share a label, each is numbered by position among them (`Examples 1`, `Examples 2`) |
+| `tags` | feature, scenario and Examples tags, merged, sorted, unique, without `@` |
 | `identifier` | `"<file_path>:<line>"` (scenario line, or the Examples row line) |
 | `line_number` | scenario line, or the Examples row line |
 | `status` | passed→passed; failed, ambiguous→failed; pending, undefined→pending; skipped→skipped |

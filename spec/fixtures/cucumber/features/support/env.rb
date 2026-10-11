@@ -2,6 +2,16 @@
 
 # FIXTURE_MODE: "formatter" (default; wired up by --format), "plugin" or "both"
 # (requiring raider_reporter/cucumber installs the plugin).
+if ENV["FIXTURE_BREAK_INSTALL"]
+  Cucumber::Glue::Dsl.singleton_class.prepend(Module.new do
+    def register_rb_hook(type, *, **)
+      raise "registry is gone" if type == "install_plugin"
+
+      super
+    end
+  end)
+end
+
 if ENV.fetch("FIXTURE_MODE", "formatter") == "formatter"
   require "raider_reporter/cucumber/formatter"
 else
@@ -17,6 +27,8 @@ end
 Before("@boom_before") do
   raise "setup exploded"
 end
+
+Before("@skip") { skip_this_scenario }
 
 AfterStep("@boom_after_step") do
   raise "after step exploded"

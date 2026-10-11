@@ -137,6 +137,38 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
     end
   end
 
+  describe "Examples tables sharing a label" do
+    let(:results) { run_cucumber("features/examples_tables.feature")[3] }
+
+    it "numbers every same-label table by position and keeps unique labels unchanged" do
+      expect(results.keys).to contain_exactly(
+        "Tables: Same labels (Examples 1, row 1)", "Tables: Same labels (Examples 2, row 1)",
+        "Tables: Same labels (Named, row 1)"
+      )
+    end
+
+    it "gives each table its own tags" do
+      expect(results.fetch("Tables: Same labels (Examples 1, row 1)")["tags"]).to eq(%w[smoke])
+      expect(results.fetch("Tables: Same labels (Examples 2, row 1)")["tags"]).to eq(%w[regression])
+      expect(results.fetch("Tables: Same labels (Named, row 1)")["tags"]).to eq([])
+    end
+  end
+
+  it "reports a scenario skipped by skip_this_scenario as skipped" do
+    result = run_cucumber("features/skipped.feature")[3].fetch("Skipping: Skipped on purpose")
+    expect(result).to include("status" => "skipped")
+    expect(result["failure"]).to be_nil
+  end
+
+  describe "relative_path" do
+    it "falls back to the given path when relative_path_from raises ArgumentError" do
+      formatter = RaiderReporter::Cucumber::Formatter.allocate
+      allow_any_instance_of(Pathname).to receive(:relative_path_from).and_raise(ArgumentError, "different prefix")
+
+      expect(formatter.send(:relative_path, "./features/a.feature")).to eq("features/a.feature")
+    end
+  end
+
   it "scrubs binary bytes from exception messages and still writes the run" do
     # Cucumber's own console formatters choke on invalid UTF-8, so ours runs alone here.
     results = run_cucumber("features/binary.feature", format_args: ["--format", "RaiderReporter::Cucumber::Formatter"])[3]
@@ -424,6 +456,15 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       end
     end
 
+    it "warns once and still runs when registering the plugin hook fails inside a run" do
+      _out, stderr, status, results = run_cucumber("features/login.feature:3", mode: "plugin",
+                                                                            extra_env: { "FIXTURE_BREAK_INSTALL" => "1" })
+      expect(status.exitstatus).to eq(0), stderr
+      expect(results).to be_empty
+      expect(stderr.scan("[raider_reporter]").size).to eq(1)
+      expect(stderr).to include("registry is gone")
+    end
+
     it "records nothing when cucumber's own attach raises" do
       Dir.mktmpdir do |dir|
         results = run_cucumber("features/attach_edges.feature:9", mode: "plugin",
@@ -451,6 +492,16 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       world = Class.new(base) { prepend RaiderReporter::Cucumber::Formatter::AttachCapture }
 
       expect(world.new.attach("inline", "text/plain")).to eq(:cucumber_result)
+    end
+
+    it "forwards every argument cucumber passes, including a filename and future ones" do
+      seen = nil
+      base = Class.new { def attach(*args, **) = args }
+      world = Class.new(base) { prepend RaiderReporter::Cucumber::Formatter::AttachCapture }
+      allow(RaiderReporter::Cucumber::Formatter).to receive(:record_attachment) { |*a| seen = a }
+
+      expect(world.new.attach("/tmp/a.png", "image/png", "shot.png", :future)).to eq(["/tmp/a.png", "image/png", "shot.png", :future])
+      expect(seen).to eq(["/tmp/a.png", "image/png"])
     end
 
     it "does not leak the dry-run flag into the next run" do
