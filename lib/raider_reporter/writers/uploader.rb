@@ -8,7 +8,7 @@ require "securerandom"
 module RaiderReporter
   module Writers
     class Uploader
-      Result = Data.define(:ok, :url, :run_id, :error)
+      Result = Data.define(:ok, :url, :run_id, :build_url, :error)
       # Keeps uploads under the server's 50 MB request limit and multipart part limit.
       MAX_UPLOAD_ATTACHMENT_BYTES = 45 * 1024 * 1024
       MAX_UPLOAD_ATTACHMENTS = 1000
@@ -42,7 +42,7 @@ module RaiderReporter
         end
         to_result(response)
       rescue StandardError => e
-        Result.new(ok: false, url: nil, run_id: nil, error: "#{e.class}: #{e.message}")
+        Result.new(ok: false, url: nil, run_id: nil, build_url: nil, error: "#{e.class}: #{e.message}")
       end
 
       private
@@ -93,9 +93,11 @@ module RaiderReporter
       def to_result(response)
         if response.is_a?(Net::HTTPSuccess)
           body = parse_body(response.body)
-          Result.new(ok: true, url: present(body["url"]), run_id: present(body["run_id"]), error: nil)
+          build = body["build"].is_a?(Hash) ? body["build"] : {}
+          Result.new(ok: true, url: present(body["url"]), run_id: present(body["run_id"]),
+                     build_url: present(build["url"]), error: nil)
         else
-          Result.new(ok: false, url: nil, run_id: nil, error: "HTTP #{response.code}: #{response.body.to_s[0, 200]}")
+          Result.new(ok: false, url: nil, run_id: nil, build_url: nil, error: "HTTP #{response.code}: #{response.body.to_s[0, 200]}")
         end
       end
 

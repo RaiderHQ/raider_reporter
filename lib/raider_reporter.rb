@@ -95,7 +95,8 @@ module RaiderReporter
     private
 
     def success_line(result)
-      return "Raider report: #{result.url}" if result.url
+      link = result.build_url || result.url
+      return "Raider report: #{link}" if link
       return "Raider report uploaded (run #{result.run_id})" if result.run_id
 
       "Raider report uploaded"
