@@ -3,7 +3,7 @@
 begin
   require "cucumber"
 rescue LoadError => e
-  raise unless e.path == "cucumber" || e.message.include?("cucumber")
+  raise unless e.path == "cucumber"
 
   raise LoadError, "raider_reporter/cucumber needs the cucumber gem (>= 9, < 12) in your Gemfile"
 end

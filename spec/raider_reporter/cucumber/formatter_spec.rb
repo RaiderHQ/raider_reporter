@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require "tmpdir"
 require "rbconfig"
 require "raider_reporter/cucumber/formatter"
 
@@ -224,6 +225,26 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       output, status = Open3.capture2e(RbConfig.ruby, "-I", lib_dir, "-e", 'require "raider_reporter/cucumber"; puts :ok')
       expect(status.success?).to be(true), output
       expect(output).to include("ok")
+    end
+  end
+
+  describe "LoadError guard" do
+    it "explains a missing cucumber gem" do
+      output, status = Open3.capture2e(
+        { "RUBYOPT" => nil, "RUBYLIB" => nil }, RbConfig.ruby, "--disable-gems", "-I", lib_dir, "-e", 'require "raider_reporter/cucumber"'
+      )
+      expect(status.success?).to be(false)
+      expect(output).to include("raider_reporter/cucumber needs the cucumber gem (>= 9, < 12)")
+    end
+
+    it "re-raises an unrelated LoadError even if its message mentions cucumber" do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "cucumber.rb"), 'require "cucumber_helper_that_is_missing"')
+        output, status = Open3.capture2e(RbConfig.ruby, "-I", dir, "-I", lib_dir, "-e", 'require "raider_reporter/cucumber"')
+        expect(status.success?).to be(false)
+        expect(output).to include("cucumber_helper_that_is_missing")
+        expect(output).not_to include("needs the cucumber gem")
+      end
     end
   end
 

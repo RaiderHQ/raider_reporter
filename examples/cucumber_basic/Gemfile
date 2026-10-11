@@ -1,0 +1,7 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gem "raider_reporter", path: "../.."
+gem "cucumber", ">= 9", "< 12"
+gem "logger" # Cucumber 9 requires it without declaring it; Ruby 4 no longer bundles it
