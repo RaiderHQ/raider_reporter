@@ -3,6 +3,7 @@
 require "time"
 require "rbconfig"
 require_relative "raider_reporter/version"
+require_relative "raider_reporter/text"
 require_relative "raider_reporter/models"
 require_relative "raider_reporter/payload"
 require_relative "raider_reporter/configuration"
