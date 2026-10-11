@@ -27,7 +27,7 @@ RSpec.describe RaiderReporter::Comment::GithubClient do
 
   it "updates the marked comment found on page 2" do
     list(1, Array.new(100) { |i| { id: i + 1, body: "c#{i}" } })
-    list(2, [{ id: 500, body: "other" }, { id: 501, body: "#{marker}\nold" }])
+    list(2, [{ id: 500, body: "other" }, { id: 501, body: "#{marker}\nold", user: { type: "Bot" } }])
     patch = stub_request(:patch, "#{base}/issues/comments/501").with(body: { body: "#{marker}\nnew" }.to_json)
                                                                .to_return(status: 200, body: { html_url: "https://gh/c/501" }.to_json)
     expect(client.upsert_comment(7, "#{marker}\nnew", marker)).to eq("https://gh/c/501")
@@ -65,5 +65,58 @@ RSpec.describe RaiderReporter::Comment::GithubClient do
     client.set_status("abc123", state: "failure", target_url: "https://r/b/1", description: "x" * 300,
                                 context: "raider/tests")
     expect(stub).to have_been_requested
+  end
+
+  describe "hardening" do
+    def post_stub(html = "https://gh/c/new")
+      stub_request(:post, "#{base}/issues/7/comments").to_return(status: 201, body: { html_url: html }.to_json)
+    end
+
+    it "only updates marked comments written by a bot" do
+      list(1, [{ id: 1, body: "#{marker}\nhuman", user: { type: "User" } },
+               { id: 2, body: "#{marker}\nold", user: { type: "Bot" } }])
+      patch = stub_request(:patch, "#{base}/issues/comments/2").to_return(status: 200, body: { html_url: "u2" }.to_json)
+      expect(client.upsert_comment(7, "#{marker}\nnew", marker)).to eq("u2")
+      expect(patch).to have_been_requested
+    end
+
+    it "creates a new comment when only a human posted the marker" do
+      list(1, [{ id: 1, body: "#{marker}\nhuman", user: { type: "User" } }, { id: 3, body: "#{marker}\nx" }])
+      post = post_stub
+      expect(client.upsert_comment(7, "#{marker}\nnew", marker)).to eq("https://gh/c/new")
+      expect(post).to have_been_requested
+      expect(a_request(:patch, /comments/)).not_to have_been_made
+    end
+
+    it "does not match a comment quoting the marker mid-body" do
+      list(1, [{ id: 1, body: "> #{marker}\nquoted", user: { type: "Bot" } }])
+      post = post_stub
+      client.upsert_comment(7, "#{marker}\nnew", marker)
+      expect(post).to have_been_requested
+    end
+
+    ["https://api.github.test", "https://api.github.test//", "https://api.github.test/"].each do |url|
+      it "builds /repos/... URLs from #{url.inspect}" do
+        c = described_class.new(token: "gh", repository: "Raider/demo", api_url: url)
+        stub = stub_request(:post, "https://api.github.test/repos/Raider/demo/statuses/abc").to_return(status: 201, body: "{}")
+        c.set_status("abc", state: "success", target_url: "u", description: "d", context: "c")
+        expect(stub).to have_been_requested
+      end
+    end
+
+    it "rejects a non-http api_url" do
+      c = described_class.new(token: "gh", repository: "Raider/demo", api_url: "ftp://api.github.test")
+      expect { c.set_status("abc", state: "success", target_url: "u", description: "d", context: "c") }
+        .to raise_error(described_class::Error, /http/)
+    end
+
+    it "never puts the token in error messages" do
+      secret = described_class.new(token: "s3cr3t-token", repository: "Raider/demo", api_url: "https://api.github.test")
+      stub_request(:get, "#{base}/issues/7/comments").with(query: hash_including({}))
+                                                    .to_return(status: 500, body: "bad credentials s3cr3t-token")
+      expect { secret.upsert_comment(7, "b", marker) }.to raise_error(described_class::Error) { |e| expect(e.message).not_to include("s3cr3t-token") }
+      stub_request(:get, "#{base}/issues/7/comments").with(query: hash_including({})).to_raise(StandardError.new("boom s3cr3t-token"))
+      expect { secret.upsert_comment(7, "b", marker) }.to raise_error(described_class::Error) { |e| expect(e.message).not_to include("s3cr3t-token") }
+    end
   end
 end

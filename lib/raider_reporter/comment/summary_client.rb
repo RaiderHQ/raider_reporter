@@ -66,7 +66,7 @@ module RaiderReporter
       end
 
       def fail_with(reason)
-        @last_error = reason
+        @last_error = @token.to_s.empty? ? reason : reason.gsub(@token.to_s, "[REDACTED]")
         nil
       end
     end

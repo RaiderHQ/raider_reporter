@@ -19,7 +19,7 @@ module RaiderReporter
       def initialize(token:, repository:, api_url: "https://api.github.com", timeout: 30)
         @token = token
         @repository = repository
-        @api_url = api_url.to_s.strip.chomp("/")
+        @api_url = api_url.to_s.strip.sub(%r{/+\z}, "")
         @timeout = timeout
       end
 
@@ -50,11 +50,21 @@ module RaiderReporter
           comments = request(:get, "/repos/#{@repository}/issues/#{pr_number}/comments?per_page=#{PER_PAGE}&page=#{page}")
           raise Error, "unexpected comments response" unless comments.is_a?(Array)
 
-          found = comments.find { |c| c.is_a?(Hash) && c["body"].to_s.start_with?(marker) }
+          found = comments.find { |c| ours?(c, marker) }
           return found if found
           return nil if comments.size < PER_PAGE
         end
         nil
+      end
+
+      # Only our own (bot-authored) marked comment is ever edited.
+      def ours?(comment, marker)
+        comment.is_a?(Hash) && comment["body"].to_s.start_with?(marker) &&
+          comment.dig("user", "type") == "Bot"
+      end
+
+      def redact(text)
+        @token.to_s.empty? ? text.to_s : text.to_s.gsub(@token.to_s, "[REDACTED]")
       end
 
       def request(verb, path, body: nil, payload: nil)
@@ -69,7 +79,7 @@ module RaiderReporter
       rescue Error
         raise
       rescue StandardError => e
-        raise Error, "#{e.class}: #{e.message}"
+        raise Error, redact("#{e.class}: #{e.message}")
       end
 
       def build_request(verb, uri, json)
@@ -89,7 +99,7 @@ module RaiderReporter
       def handle(response)
         code = response.code.to_i
         raise Forbidden, "HTTP #{code}" if [403, 404].include?(code)
-        raise Error, "HTTP #{code}: #{response.body.to_s[0, 200]}" unless (200..299).cover?(code)
+        raise Error, redact("HTTP #{code}: #{response.body.to_s[0, 200]}") unless (200..299).cover?(code)
 
         JSON.parse(response.body.to_s)
       rescue JSON::ParserError

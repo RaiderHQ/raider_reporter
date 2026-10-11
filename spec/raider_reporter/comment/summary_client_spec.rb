@@ -50,8 +50,18 @@ RSpec.describe RaiderReporter::Comment::SummaryClient do
   end
 
   it "rejects a non-http endpoint" do
-    bad = described_class.new(endpoint: "ftp://x", token: "t")
+    bad = described_class.new(endpoint: "ftp://x", token: "tok")
     expect(bad.fetch("k")).to be_nil
     expect(bad.last_error).to match(/http/)
+  end
+
+  it "never puts the token in last_error" do
+    c = described_class.new(endpoint: "https://raider.test", token: "s3cr3t-token")
+    stub_request(:get, url).with(query: { build_key: "k" }).to_return(status: 500, body: "echo s3cr3t-token")
+    expect(c.fetch("k")).to be_nil
+    expect(c.last_error).not_to include("s3cr3t-token")
+    stub_request(:get, url).with(query: { build_key: "k" }).to_raise(StandardError.new("boom s3cr3t-token"))
+    expect(c.fetch("k")).to be_nil
+    expect(c.last_error).not_to include("s3cr3t-token")
   end
 end
