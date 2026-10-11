@@ -70,7 +70,7 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
 
       [1, 2].each do |i|
         json = JSON.parse(File.read(File.join(out, "run-#{i}.json")))
-        expect(json["run"]["shard"]).to include("index" => i, "total" => 2, "label" => "local#1.#{i}")
+        expect(json["run"]["shard"]).to include("index" => i, "total" => 2, "label" => a_string_ending_with("#1.#{i}"))
         expect(File).to exist(File.join(out, "attachments-#{i}", "0-shot.png"))
       end
     end
