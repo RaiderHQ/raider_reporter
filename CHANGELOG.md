@@ -3,7 +3,7 @@
 ## 0.4.0 — 2026-10-11
 
 - Add a Cucumber reporter (Cucumber >= 9, < 12; not a gem dependency). `require "raider_reporter/cucumber"` from `features/support/` registers it in plugin mode (recommended, works with any `--format` and no `--out`); `--format RaiderReporter::Cucumber::Formatter --out <file>` also works. Using both registers one listener
-- Identity: `file_path` is project-relative (`features/login.feature`), `full_name` is `"<Feature>: <Scenario>"` (outline rows add `(<Examples name>, row <n>)`), `identifier` is `<file>:<line>`
+- Identity: `file_path` is project-relative (`features/login.feature`), `full_name` is `"<Feature>: <Scenario>"` (outline rows add `(<Examples name>, row <n>)`; when several Examples tables share a label, each is numbered: `(Examples 1, row 1)`, `(Examples 2, row 1)`), `identifier` is `<file>:<line>`
 - Report the failing step (or Before/After hook) with its location in the failure message; ambiguous maps to failed, undefined to pending
 - Retries: only the final attempt is kept, with `attempts` set and earlier attachments dropped
 - Attachments: `RaiderReporter.attach` and Cucumber's `attach(path, media_type)` with an existing file path are captured; inline data and `log` messages are ignored
