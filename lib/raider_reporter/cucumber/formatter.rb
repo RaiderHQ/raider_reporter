@@ -20,10 +20,24 @@ module RaiderReporter
         pending: "pending", undefined: "pending", skipped: "skipped"
       }.freeze
 
+      @claimed = []
+
+      class << self
+        # One listener per run, whether it arrives as a --format or as a plugin.
+        # Cucumber copies the configuration for --out, but the event bus is shared.
+        def claim(config)
+          bus = config.event_bus
+          return false if @claimed.any? { |claimed| claimed.equal?(bus) }
+
+          @claimed << bus
+          true
+        end
+      end
+
       def initialize(config)
         @buffer = {}
         @attempt = nil
-        guard { setup(config) }
+        guard { setup(config) if self.class.claim(config) }
       end
 
       private
@@ -55,11 +69,13 @@ module RaiderReporter
         problem = @attempt && @attempt[:problem]
         @attempt = nil
         status = STATUSES.fetch(result.to_sym, "pending")
+        # Always buffer: a lookup problem may lose detail, never the scenario.
+        failure = status == "failed" ? safely(nil) { failure_for(problem, result, test_case) } : nil
         fields = identity_for(test_case).merge(
           status: status,
           duration_ms: duration_ms(result),
           attempts: 1,
-          failure: status == "failed" ? failure_for(problem, result, test_case) : nil
+          failure: failure
         )
         @buffer[fields[:identifier]] = fields
       end
@@ -83,23 +99,25 @@ module RaiderReporter
       end
 
       def full_name(test_case)
-        feature = @ast.gherkin_document(test_case.location.file)&.feature
-        source = @ast.scenario_source(test_case)
-        name = scenario_name(source, test_case)
-        feature ? "#{feature.name}: #{name}" : name
+        safely(test_case.name) do
+          feature = @ast.gherkin_document(test_case.location.file)&.feature
+          name = scenario_name(@ast.scenario_source(test_case))
+          next test_case.name unless name
+
+          feature ? "#{feature.name}: #{name}" : name
+        end
       end
 
-      def scenario_name(source, test_case)
+      # nil when the scenario cannot be located in the AST.
+      def scenario_name(source)
         case source&.type
         when :ScenarioOutline
           examples = source.examples
           label = examples.name.to_s.strip.empty? ? "Examples" : examples.name.strip
-          row = examples.table_body.index { |candidate| candidate.equal?(source.row) } || 0
-          "#{source.scenario_outline.name} (#{label}, row #{row + 1})"
+          row = examples.table_body.index { |candidate| candidate.location.line == source.row.location.line }
+          row && "#{source.scenario_outline.name} (#{label}, row #{row + 1})"
         when :Scenario
           source.scenario.name
-        else
-          test_case.name
         end
       end
 
@@ -124,8 +142,12 @@ module RaiderReporter
         if test_step.hook?
           "#{hook_kind(test_step, test_case)} hook #{location}"
         else
-          "#{@ast.step_source(test_step).step.keyword}#{test_step.text} #{location}"
+          "#{step_keyword(test_step)}#{test_step.text} #{location}"
         end
+      end
+
+      def step_keyword(test_step)
+        safely("") { @ast.step_source(test_step).step.keyword.to_s }
       end
 
       # A hook with a real step before it runs after the scenario started.
@@ -145,6 +167,13 @@ module RaiderReporter
         absolute = Pathname.new(File.expand_path(path.to_s, Dir.pwd))
         relative = absolute.relative_path_from(Pathname.new(Dir.pwd)).to_s
         relative.start_with?("..") ? path.to_s.delete_prefix("./") : relative
+      end
+
+      def safely(fallback)
+        yield
+      rescue StandardError => e
+        RaiderReporter.warn("#{e.class}: #{e.message}")
+        fallback
       end
 
       def guard

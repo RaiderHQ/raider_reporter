@@ -1,8 +1,26 @@
 # frozen_string_literal: true
 
-require "raider_reporter/cucumber"
+# FIXTURE_MODE: "formatter" (default; wired up by --format), "plugin" or "both"
+# (requiring raider_reporter/cucumber installs the plugin).
+if ENV.fetch("FIXTURE_MODE", "formatter") == "formatter"
+  require "raider_reporter/cucumber/formatter"
+else
+  require "raider_reporter/cucumber"
+end
 
 RaiderReporter.configure { |c| c.output_dir = ENV.fetch("FIXTURE_OUT") }
+
+if ENV["FIXTURE_BREAK_AST"]
+  Cucumber::Formatter::AstLookup.prepend(Module.new { def gherkin_document(_uri) = nil })
+end
+
+Before("@boom_before") do
+  raise "setup exploded"
+end
+
+AfterStep("@boom_after_step") do
+  raise "after step exploded"
+end
 
 After("@boom_after") do
   raise "teardown exploded"

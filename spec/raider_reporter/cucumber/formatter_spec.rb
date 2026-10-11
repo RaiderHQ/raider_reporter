@@ -8,13 +8,17 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   let(:fixture_dir) { File.expand_path("../../fixtures/cucumber", __dir__) }
 
   # Runs cucumber from the fixture project; returns [stdout, stderr, status, results by full_name].
-  def run_cucumber(*targets, extra_args: [], format_args: nil)
+  def run_cucumber(*targets, extra_args: [], format_args: nil, mode: "formatter", extra_env: {})
     Dir.mktmpdir do |out|
       env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "GITHUB_ACTIONS" => nil,
-              "GITHUB_JOB" => nil, "FIXTURE_OUT" => out }
+              "GITHUB_JOB" => nil, "FIXTURE_OUT" => out, "FIXTURE_MODE" => mode }.merge(extra_env)
       # Cucumber allows only one formatter per stream, so ours must be given --out.
-      format_args ||= ["--format", "RaiderReporter::Cucumber::Formatter", "--out", File.join(out, "formatter.out"),
-                       "--format", "progress"]
+      format_args ||= if mode == "plugin"
+                        ["--format", "progress"]
+                      else
+                        ["--format", "RaiderReporter::Cucumber::Formatter", "--out", File.join(out, "formatter.out"),
+                         "--format", "progress"]
+                      end
       stdout, stderr, status = Open3.capture3(
         env, RbConfig.ruby, "-I", lib_dir, Gem.bin_path("cucumber", "cucumber"),
         "-r", "features", "--publish-quiet", *format_args, *extra_args, *targets, chdir: fixture_dir
@@ -74,8 +78,11 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       expect(result["failure"]["message"]).to start_with("When I am ambiguous (features/login.feature:")
     end
 
-    it "does not let steps after a failed step change the scenario status" do
-      expect(results.fetch("Login: A user is rejected")["status"]).to eq("failed")
+    it "does not let steps after a failed step change the scenario status or message" do
+      result = results.fetch("Login: A user is rejected")
+      expect(result["status"]).to eq("failed")
+      expect(result["failure"]["message"]).to start_with("When I fail on purpose")
+      expect(result["failure"]["message"]).not_to include("I see the dashboard")
     end
 
     it "keeps cucumber's exit status and progress output" do
@@ -139,6 +146,69 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
     expect(result["status"]).to eq("failed")
     expect(result["failure"]["message"]).to start_with("After hook")
     expect(result["failure"]["message"]).to end_with("teardown exploded")
+  end
+
+  it "names a failing Before hook" do
+    result = run_cucumber("features/before_hook.feature")[3].fetch("Setup: Setup fails")
+    expect(result["status"]).to eq("failed")
+    expect(result["failure"]["message"]).to start_with("Before hook (features/support/env.rb:").and end_with("setup exploded")
+  end
+
+  it "names a failing AfterStep hook as an After hook" do
+    result = run_cucumber("features/after_step.feature")[3].fetch("Step teardown: Step teardown fails")
+    expect(result["status"]).to eq("failed")
+    expect(result["failure"]["message"]).to start_with("After hook (features/support/env.rb:").and end_with("after step exploded")
+  end
+
+  it "still reports scenarios, with fallback names, when the AST lookup fails" do
+    # The stub also breaks cucumber's own console formatters, so ours runs alone.
+    _stdout, stderr, status, results = run_cucumber(
+      "features/login.feature", extra_env: { "FIXTURE_BREAK_AST" => "1" },
+                                format_args: ["--format", "RaiderReporter::Cucumber::Formatter"]
+    )
+
+    expect(status.exitstatus).to eq(1), stderr
+    expect(stderr).to include("[raider_reporter]")
+    expect(results.keys).to include("A user can login", "A user is rejected")
+    expect(results.fetch("A user can login")["status"]).to eq("passed")
+    failed = results.fetch("A user is rejected")
+    expect(failed["status"]).to eq("failed")
+    # No keyword without the AST, but the step text and location survive.
+    expect(failed["failure"]["message"]).to start_with("I fail on purpose (features/login.feature:")
+  end
+
+  describe "plugin mode (no --format)" do
+    it "reports pass, fail and outline rows while progress output stays untouched" do
+      stdout, stderr, status, results = run_cucumber("features/login.feature", "features/outline.feature", mode: "plugin")
+
+      expect(stderr).not_to include("All but one formatter")
+      expect(status.exitstatus).to eq(1), stderr
+      expect(stdout).to include("scenarios (")
+      expect(results.fetch("Login: A user can login")["status"]).to eq("passed")
+      expect(results.fetch("Login: A user is rejected")["status"]).to eq("failed")
+      expect(results.keys.grep(/Greetings/).size).to eq(4)
+      expect(results.fetch("Greetings: Greet users (Admins, row 1)")["tags"]).to eq(%w[admin login smoke])
+    end
+
+    it "registers one listener when --format and the plugin are both active" do
+      Dir.mktmpdir do |out|
+        _stdout, _stderr, _status, results = run_cucumber(
+          "features/login.feature", mode: "both",
+          format_args: ["--format", "RaiderReporter::Cucumber::Formatter", "--out", File.join(out, "f.out"),
+                        "--format", "progress"]
+        )
+        run = @last[:json]["results"]
+        expect(run.size).to eq(5)
+        expect(run.map { |r| r["identifier"] }.uniq.size).to eq(5)
+        expect(results.size).to eq(5)
+      end
+    end
+
+    it "can be required outside a cucumber run without raising" do
+      output, status = Open3.capture2e(RbConfig.ruby, "-I", lib_dir, "-e", 'require "raider_reporter/cucumber"; puts :ok')
+      expect(status.success?).to be(true), output
+      expect(output).to include("ok")
+    end
   end
 
   describe "file_path stability" do
