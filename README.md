@@ -63,7 +63,7 @@ end
 | `token` | `ENV["RAIDER_TOKEN"]` | API token used for uploads. |
 | `endpoint` | `ENV["RAIDER_ENDPOINT"]` | Base URL of the Raider server to upload to. |
 | `output_dir` | `"raider-results"` | Directory for local output. |
-| `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory inside `output_dir` before writing. Nothing else in `output_dir` is touched. |
+| `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory (`run-<n>.json` and `attachments-<n>/` when sharded) inside `output_dir` before writing. Nothing else in `output_dir` is touched. |
 | `environment` | `{}` | Free-form key/values stored with the run (browser, suite name, and so on). Values are JSON values: strings, booleans or numbers. |
 
 ## Local output
@@ -84,13 +84,59 @@ If both a token and an endpoint are set, the run (plus attachments) is uploaded 
 RAIDER_TOKEN=... RAIDER_ENDPOINT=https://your-raider-server bundle exec rspec
 ```
 
-On success the formatter prints `Raider report: <url>` (or `Raider report uploaded (run <id>)` if the server's response has no URL). If either value is missing, nothing is uploaded and the local files are still written.
+On success the formatter prints `Raider report: <url>`, using the build URL when the server returns one and the run URL otherwise (or `Raider report uploaded (run <id>)` if the response has no URL). If either value is missing, nothing is uploaded and the local files are still written.
 
 An upload carries at most 45 MB of attachments and at most 1000 attachment files. Attachments past that budget are left out of the upload (in order, with one warning) but stay in the local `raider-results/`.
 
 Reporting is fail-open: no error inside the gem, network failure, timeout or non-2xx response will raise or change RSpec's exit status. Each connect/write/read step of the upload times out after 30 seconds. Problems are printed as warnings prefixed with `[raider_reporter]`. An endpoint without `http://` or `https://` (for example `localhost:3000`) produces a warning and nothing is uploaded; a trailing slash is fine.
 
 The hosted Raider service is not public yet; uploads go to a Raider server whose address you provide in `RAIDER_ENDPOINT`.
+
+## Parallel runs
+
+When a suite is split across several processes or CI jobs, each one uploads its own run. Raider groups runs of the same CI build, so the shards show up together as one build. Each run records its shard (`index`, `total` and a `label`) and, on GitHub Actions, a build key made from the repository, run id and run attempt. A re-run attempt of a workflow is a separate build.
+
+Shard detection, in order of precedence:
+
+1. `RAIDER_SHARD_INDEX` (1 or more) and, optionally, `RAIDER_SHARD_TOTAL`.
+2. `parallel_tests` / `parallel_rspec`: `TEST_ENV_NUMBER` (empty means shard 1) and `PARALLEL_TEST_GROUPS` for the total.
+3. Otherwise the run is not sharded.
+
+A GitHub Actions matrix needs only the two variables:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - run: bundle exec rspec  # split the spec files by shard however you like
+        env:
+          RAIDER_TOKEN: ${{ secrets.RAIDER_TOKEN }}
+          RAIDER_ENDPOINT: ${{ vars.RAIDER_ENDPOINT }}
+          RAIDER_SHARD_INDEX: ${{ matrix.shard }}
+          RAIDER_SHARD_TOTAL: 4
+```
+
+`parallel_rspec` works with no configuration, because it sets `TEST_ENV_NUMBER` and `PARALLEL_TEST_GROUPS` for each process.
+
+When a run is sharded, local output is written per shard so that processes sharing one `raider-results/` do not overwrite each other. Cleaning only removes the current shard's own files:
+
+```
+raider-results/
+  run-1.json
+  attachments-1/
+  run-2.json
+  attachments-2/
+```
+
+Unsharded runs still write `run.json` and `attachments/`. Tools that read local results should load `run*.json`.
 
 ## Examples
 
