@@ -10,5 +10,5 @@ module RaiderReporter
     :identifier, :full_name, :file_path, :line_number, :status,
     :duration_ms, :attempts, :tags, :failure, :attachments
   )
-  Run = Data.define(:client_run_id, :started_at, :finished_at, :ci, :git, :environment, :results)
+  Run = Data.define(:client_run_id, :started_at, :finished_at, :ci, :git, :environment, :results, :shard)
 end

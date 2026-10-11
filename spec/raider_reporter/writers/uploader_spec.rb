@@ -18,7 +18,7 @@ RSpec.describe RaiderReporter::Writers::Uploader do
                                             failure: nil, attachments: [att])
     RaiderReporter::Payload.new(RaiderReporter::Run.new(client_run_id: "u", started_at: Time.now.utc,
                                                          finished_at: Time.now.utc, ci: nil, git: nil,
-                                                         environment: {}, results: [result]))
+                                                         environment: {}, results: [result], shard: nil))
   end
 
   def multi_payload(dir, sizes_per_result)
@@ -35,7 +35,7 @@ RSpec.describe RaiderReporter::Writers::Uploader do
     end
     RaiderReporter::Payload.new(RaiderReporter::Run.new(client_run_id: "u", started_at: Time.now.utc,
                                                          finished_at: Time.now.utc, ci: nil, git: nil,
-                                                         environment: {}, results: results))
+                                                         environment: {}, results: results, shard: nil))
   end
 
   def uploaded_payload_json

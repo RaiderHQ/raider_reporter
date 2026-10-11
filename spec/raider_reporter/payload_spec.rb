@@ -15,7 +15,7 @@ RSpec.describe RaiderReporter::Payload do
   let(:run) do
     RaiderReporter::Run.new(
       client_run_id: "uuid-1", started_at: Time.utc(2026, 10, 10, 12), finished_at: Time.utc(2026, 10, 10, 12, 4, 31),
-      ci: nil, git: { "branch" => "main" }, environment: { "ruby" => "4.0.2" }, results: [passed, failed]
+      ci: nil, git: { "branch" => "main" }, environment: { "ruby" => "4.0.2" }, results: [passed, failed], shard: nil
     )
   end
 
@@ -29,6 +29,15 @@ RSpec.describe RaiderReporter::Payload do
       "started_at" => "2026-10-10T12:00:00.000Z", "finished_at" => "2026-10-10T12:04:31.000Z",
       "git" => { "branch" => "main" }, "environment" => { "ruby" => "4.0.2" }
     )
+  end
+
+  it "serializes the shard under run.shard and omits it when nil" do
+    shard = { "index" => 2, "total" => 3, "label" => "e2e#2" }
+    sharded = described_class.new(run.with(shard: shard))
+    expect(sharded.to_h(mode: :local)["run"]["shard"]).to eq(shard)
+    expect(sharded.shard_index).to eq(2)
+    expect(payload.to_h(mode: :local)["run"]).not_to have_key("shard")
+    expect(payload.shard_index).to be_nil
   end
 
   it "keeps sub-second precision in run timestamps" do

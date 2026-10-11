@@ -9,7 +9,7 @@ RSpec.describe RaiderReporter::Writers::Local do
       attempts: 1, tags: [], failure: nil, attachments: attachments
     )
     RaiderReporter::Run.new(client_run_id: "u", started_at: Time.now.utc, finished_at: Time.now.utc,
-                            ci: nil, git: nil, environment: {}, results: [result])
+                            ci: nil, git: nil, environment: {}, results: [result], shard: nil)
   end
 
   it "writes run.json and copies attachments" do
