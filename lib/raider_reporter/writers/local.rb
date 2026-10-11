@@ -12,12 +12,12 @@ module RaiderReporter
 
       def write(payload)
         dir = File.expand_path(@config.output_dir)
-        clean(dir) if @config.clean_output_dir
-        FileUtils.mkdir_p(File.join(dir, "attachments"))
+        clean(dir, payload) if @config.clean_output_dir
+        FileUtils.mkdir_p(File.join(dir, payload.attachments_dir))
         payload.attachment_entries.each do |entry|
           FileUtils.cp(entry[:attachment].source_path, File.join(dir, entry[:path]))
         end
-        run_json = File.join(dir, "run.json")
+        run_json = File.join(dir, payload.run_file)
         File.write(run_json, JSON.pretty_generate(payload.to_h(mode: :local)))
         run_json
       end
@@ -25,9 +25,9 @@ module RaiderReporter
       private
 
       # Remove only what this writer creates, so output_dir "." or "spec" is safe.
-      def clean(dir)
-        FileUtils.rm_f(File.join(dir, "run.json"))
-        FileUtils.rm_rf(File.join(dir, "attachments"))
+      def clean(dir, payload)
+        FileUtils.rm_f(File.join(dir, payload.run_file))
+        FileUtils.rm_rf(File.join(dir, payload.attachments_dir))
       end
     end
   end

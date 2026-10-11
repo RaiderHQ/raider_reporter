@@ -44,6 +44,23 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
     end
   end
 
+  it "keeps both shards' output when two processes share raider-results" do
+    Dir.mktmpdir do |dir|
+      run_suite(dir, { "TEST_ENV_NUMBER" => "" })
+      run_suite(dir, { "TEST_ENV_NUMBER" => "2" })
+      out = File.join(dir, "raider-results")
+
+      expect(File).not_to exist(File.join(out, "run.json"))
+      [1, 2].each do |i|
+        json = JSON.parse(File.read(File.join(out, "run-#{i}.json")))
+        expect(json["run"]["shard"]["index"]).to eq(i)
+        path = json["results"].flat_map { |r| r["attachments"] }.first["path"]
+        expect(path).to eq("attachments-#{i}/0-shot.png")
+        expect(File).to exist(File.join(out, path))
+      end
+    end
+  end
+
   it "never changes the exit status when the output dir cannot be written" do
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "raider-results"), "a file, not a directory")
