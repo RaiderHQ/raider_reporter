@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — 2026-10-11
+
+- Send run timestamps with millisecond precision, so durations under a second are no longer reported as 0
+
 ## 0.1.0 — 2026-10-11
 
 - RSpec formatter writing Raider schema v1 to `raider-results/run.json`
