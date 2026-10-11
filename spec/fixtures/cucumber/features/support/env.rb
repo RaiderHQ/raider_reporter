@@ -25,3 +25,11 @@ end
 After("@boom_after") do
   raise "teardown exploded"
 end
+
+# Simulates a bug inside the reporter to prove it is fail-open.
+if ENV["RAIDER_FIXTURE_BOOM"]
+  RaiderReporter::Collector.prepend(Module.new do
+    def finish_test(**) = raise("boom in finish_test")
+    def build_test(**) = raise("boom in build_test")
+  end)
+end

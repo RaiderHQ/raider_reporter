@@ -8,8 +8,8 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   let(:fixture_dir) { File.expand_path("../../fixtures/cucumber", __dir__) }
 
   # Runs cucumber from the fixture project; returns [stdout, stderr, status, results by full_name].
-  def run_cucumber(*targets, extra_args: [], format_args: nil, mode: "formatter", extra_env: {})
-    Dir.mktmpdir do |out|
+  def run_cucumber(*targets, extra_args: [], format_args: nil, mode: "formatter", extra_env: {}, out_dir: nil)
+    with_out_dir(out_dir) do |out|
       env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "GITHUB_ACTIONS" => nil,
               "GITHUB_JOB" => nil, "FIXTURE_OUT" => out, "FIXTURE_MODE" => mode }.merge(extra_env)
       # Cucumber allows only one formatter per stream, so ours must be given --out.
@@ -25,10 +25,25 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       )
       run_json = File.join(out, "run.json")
       json = File.exist?(run_json) ? JSON.parse(File.read(run_json)) : nil
-      @last = { stdout: stdout, stderr: stderr, status: status, json: json }
+      runs = Dir.glob(File.join(out, "run*.json")).to_h { |f| [File.basename(f), JSON.parse(File.read(f))] }
+      files = Dir.glob(File.join(out, "**", "*")).select { |f| File.file?(f) }.map { |f| f.delete_prefix("#{out}/") }
+      @last = { stdout: stdout, stderr: stderr, status: status, json: json, runs: runs, files: files }
       by_name = json ? json["results"].to_h { |r| [r["full_name"], r] } : {}
       [stdout, stderr, status, by_name]
     end
+  end
+
+  def with_out_dir(out_dir, &block)
+    return yield(out_dir) if out_dir
+
+    Dir.mktmpdir(&block)
+  end
+
+  # Fixture env for scenarios that count attempts or attach a screenshot.
+  def attempt_env(dir)
+    png = File.join(dir, "shot.png")
+    File.binwrite(png, "\x89PNG fake")
+    { "FIXTURE_COUNTER" => File.join(dir, "counter"), "FIXTURE_PNG" => png }
   end
 
   def line_of(feature, text)
@@ -236,6 +251,131 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       expect(stdout).to include("scenarios (")
       expect(stdout).not_to include("raider")
       expect(stdout).not_to include("{")
+    end
+  end
+
+  describe "retries" do
+    it "keeps one result per scenario with the final status and the attempt count" do
+      Dir.mktmpdir do |dir|
+        results = run_cucumber("features/retry.feature", extra_args: ["--retry", "1"], extra_env: attempt_env(dir))[3]
+
+        expect(@last[:json]["results"].size).to eq(2)
+        expect(results.fetch("Retry: Flaky then fine")).to include("status" => "passed", "attempts" => 2)
+        expect(results.fetch("Retry: Flaky then fine")["failure"]).to be_nil
+        expect(results.fetch("Retry: Never recovers")).to include("status" => "failed", "attempts" => 2)
+        expect(results.fetch("Retry: Never recovers")["failure"]["message"]).to start_with("When I fail on purpose")
+      end
+    end
+
+    it "works in plugin mode and reports attempts 1 without --retry" do
+      Dir.mktmpdir do |dir|
+        results = run_cucumber("features/retry.feature", mode: "plugin", extra_args: ["--retry", "1"],
+                                                         extra_env: attempt_env(dir))[3]
+        expect(results.fetch("Retry: Flaky then fine")).to include("status" => "passed", "attempts" => 2)
+      end
+      results = run_cucumber("features/login.feature")[3]
+      expect(results.fetch("Login: A user can login")["attempts"]).to eq(1)
+    end
+  end
+
+  describe "attachments" do
+    def attachment_names(result) = result["attachments"].map { |a| a["name"] }
+
+    %w[formatter plugin].each do |mode|
+      it "copies a RaiderReporter.attach file under attachments/ (#{mode} mode)" do
+        Dir.mktmpdir do |dir|
+          results = run_cucumber("features/attachments.feature", mode: mode, extra_env: attempt_env(dir))[3]
+          result = results.fetch("Attachments: Raider attach in a step")
+
+          expect(result["attachments"].size).to eq(1)
+          expect(result["attachments"].first).to include("name" => "screenshot", "content_type" => "image/png")
+          expect(result["attachments"].first["path"]).to match(%r{\Aattachments/\d+-shot\.png\z})
+          expect(@last[:files]).to include(result["attachments"].first["path"])
+        end
+      end
+
+      it "captures cucumber's own attach of an existing file by its basename (#{mode} mode)" do
+        Dir.mktmpdir do |dir|
+          results = run_cucumber("features/attachments.feature", mode: mode, extra_env: attempt_env(dir))[3]
+          attachment = results.fetch("Attachments: Cucumber attach of a file")["attachments"].fetch(0)
+
+          expect(attachment).to include("name" => "shot.png", "content_type" => "image/png")
+        end
+      end
+    end
+
+    it "ignores cucumber attach of inline text without warning" do
+      Dir.mktmpdir do |dir|
+        _out, stderr, status, results = run_cucumber("features/attachments.feature", mode: "plugin",
+                                                                                     extra_env: attempt_env(dir))
+        expect(results.fetch("Attachments: Cucumber attach of inline text")["attachments"]).to eq([])
+        expect(stderr.scan("[raider_reporter]").size).to be <= 1
+        expect(status.exitstatus).to eq(1) # only the flaky scenario fails, without --retry
+      end
+    end
+
+    it "drops attachments from earlier attempts" do
+      Dir.mktmpdir do |dir|
+        results = run_cucumber("features/attachments.feature", mode: "plugin", extra_args: ["--retry", "1"],
+                                                               extra_env: attempt_env(dir))[3]
+        flaky = results.fetch("Attachments: Attach then flake")
+
+        expect(flaky).to include("status" => "passed", "attempts" => 2)
+        expect(flaky["attachments"]).to eq([])
+        expect(@last[:files].grep(/shot\.png/).size).to eq(2) # only the two scenarios that attach once keep theirs
+      end
+    end
+
+    it "keeps the final attempt's attachment when the last attempt fails" do
+      Dir.mktmpdir do |dir|
+        results = run_cucumber("features/attachments.feature", mode: "plugin", extra_env: attempt_env(dir))[3]
+        flaky = results.fetch("Attachments: Attach then flake")
+
+        expect(flaky).to include("status" => "failed", "attempts" => 1)
+        expect(attachment_names(flaky)).to eq(["screenshot"])
+      end
+    end
+  end
+
+  describe "dry run" do
+    %w[formatter plugin].each do |mode|
+      it "writes no run.json and exits 0 (#{mode} mode)" do
+        _out, stderr, status, = run_cucumber("features/login.feature", mode: mode, extra_args: ["--dry-run"])
+
+        expect(status.exitstatus).to eq(0), stderr
+        expect(@last[:files]).to be_empty
+      end
+    end
+  end
+
+  describe "shards" do
+    it "writes run-<n>.json per parallel_tests process with shard fields" do
+      Dir.mktmpdir do |out|
+        base = { "PARALLEL_TEST_GROUPS" => "2" }
+        run_cucumber("features/login.feature", mode: "plugin", out_dir: out, extra_env: base.merge("TEST_ENV_NUMBER" => ""))
+        run_cucumber("features/outline.feature", mode: "plugin", out_dir: out, extra_env: base.merge("TEST_ENV_NUMBER" => "2"))
+
+        expect(@last[:runs].keys).to contain_exactly("run-1.json", "run-2.json")
+        expect(@last[:runs]["run-1.json"]["run"]["shard"]).to include("index" => 1, "total" => 2)
+        expect(@last[:runs]["run-2.json"]["run"]["shard"]).to include("index" => 2, "total" => 2)
+        expect(@last[:runs]["run-1.json"]["results"].map { |r| r["file_path"] }.uniq).to eq(["features/login.feature"])
+        expect(@last[:runs]["run-2.json"]["results"].map { |r| r["file_path"] }.uniq).to eq(["features/outline.feature"])
+      end
+    end
+  end
+
+  describe "fail-open" do
+    def normalized(stdout) = stdout.gsub(/\d+m\d+\.\d+s/, "XmY.Zs")
+
+    %w[formatter plugin].each do |mode|
+      it "warns on stderr but leaves cucumber's exit status and stdout unchanged when the collector raises (#{mode})" do
+        base_stdout, _stderr, base_status, = run_cucumber("features/login.feature", mode: mode)
+        stdout, stderr, status, = run_cucumber("features/login.feature", mode: mode, extra_env: { "RAIDER_FIXTURE_BOOM" => "1" })
+
+        expect(stderr).to include("[raider_reporter]")
+        expect(status.exitstatus).to eq(base_status.exitstatus)
+        expect(normalized(stdout)).to eq(normalized(base_stdout))
+      end
     end
   end
 end

@@ -20,6 +20,14 @@ module RaiderReporter
         pending: "pending", undefined: "pending", skipped: "skipped"
       }.freeze
 
+      # Passed to the World's `attach`; reports an existing file as an attachment.
+      module AttachCapture
+        def attach(file, media_type = nil, filename = nil)
+          Formatter.record_attachment(file, media_type)
+          super
+        end
+      end
+
       @claimed = []
 
       class << self
@@ -32,10 +40,41 @@ module RaiderReporter
           @claimed << bus
           true
         end
+
+        # Inline text, IO objects and missing paths are ignored: only a file that
+        # exists can be copied. Never raises into the user's step.
+        def record_attachment(file, media_type)
+          return unless file.is_a?(String) && RaiderReporter.collector&.in_test? && File.file?(file)
+
+          RaiderReporter.attach(File.basename(file), file, type: media_type)
+        rescue StandardError => e
+          RaiderReporter.warn("#{e.class}: #{e.message}")
+        end
+
+        # Called when the run ends, so the list does not outlive the run.
+        def release(config)
+          bus = config.event_bus
+          @claimed.reject! { |claimed| claimed.equal?(bus) }
+        end
+
+        # Cucumber hands steps a World, not the formatter, so `attach` is observed
+        # by prepending to ProtoWorld. Installed once, at the first formatter.
+        # Event-bus alternatives were checked in cucumber 9.2.1, 10.2.0 and 11.1.1:
+        # there is no :attach_called event before 11, and even there (and in the
+        # :envelope attachment message) a file path has already been read into
+        # bytes with no name, so the basename the report needs is only available
+        # in ProtoWorld#attach, which exists unchanged in all three versions.
+        def capture_attach
+          return if @capturing
+
+          ::Cucumber::Glue::ProtoWorld.prepend(AttachCapture)
+          @capturing = true
+        end
       end
 
       def initialize(config)
         @buffer = {}
+        @attempts = Hash.new(0)
         @attempt = nil
         guard { setup(config) if self.class.claim(config) }
       end
@@ -43,8 +82,11 @@ module RaiderReporter
       private
 
       def setup(config)
+        @config = config
         @ast = ::Cucumber::Formatter::AstLookup.new(config)
         @collector = RaiderReporter.start_collector!
+        RaiderReporter.dry_run = config.dry_run?
+        self.class.capture_attach
         config.on_event(:test_run_started) { |_event| guard { @collector.start_run } }
         config.on_event(:test_case_started) { |event| guard { case_started(event.test_case) } }
         config.on_event(:test_step_finished) { |event| guard { step_finished(event.test_step, event.result) } }
@@ -52,6 +94,7 @@ module RaiderReporter
         config.on_event(:test_run_finished) { |_event| guard { run_finished } }
       end
 
+      # Every attempt starts with an empty attachment list.
       def case_started(test_case)
         @collector.start_test
         @attempt = { test_case: test_case }
@@ -71,19 +114,21 @@ module RaiderReporter
         status = STATUSES.fetch(result.to_sym, "pending")
         # Always buffer: a lookup problem may lose detail, never the scenario.
         failure = status == "failed" ? safely(nil) { failure_for(problem, result, test_case) } : nil
-        fields = identity_for(test_case).merge(
-          status: status,
-          duration_ms: duration_ms(result),
-          attempts: 1,
-          failure: failure
+        fields = identity_for(test_case)
+        key = "#{test_case.location}|#{test_case.name}"
+        @attempts[key] += 1
+        # The newest attempt replaces the older one, taking its attachments with it.
+        @buffer[key] = @collector.build_test(
+          **fields, status: status, duration_ms: duration_ms(result), attempts: @attempts[key], failure: failure
         )
-        @buffer[fields[:identifier]] = fields
       end
 
       def run_finished
-        @buffer.each_value { |fields| @collector.finish_test(**fields) }
+        @buffer.each_value { |result| @collector.add_result(result) }
         @buffer.clear
         RaiderReporter.finish!($stderr)
+      ensure
+        self.class.release(@config)
       end
 
       def identity_for(test_case)

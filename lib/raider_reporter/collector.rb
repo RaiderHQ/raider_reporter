@@ -55,8 +55,18 @@ module RaiderReporter
     end
 
     def finish_test(**fields)
+      add_result(build_test(**fields))
+    end
+
+    # Closes the current test and returns its result without recording it, so a
+    # framework that retries can hold one result per test and replace it per attempt.
+    def build_test(**fields)
       result = TestResult.new(**fields, attachments: @pending_attachments || [])
       @pending_attachments = nil
+      result
+    end
+
+    def add_result(result)
       @results << result
       result
     end
