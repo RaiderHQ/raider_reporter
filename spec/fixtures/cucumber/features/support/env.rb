@@ -33,3 +33,15 @@ if ENV["RAIDER_FIXTURE_BOOM"]
     def build_test(**) = raise("boom in build_test")
   end)
 end
+
+if ENV["FIXTURE_BREAK_CAPTURE"]
+  RaiderReporter::Cucumber::Formatter.singleton_class.prepend(Module.new { def capture_attach = raise("ProtoWorld is gone") })
+end
+
+if ENV["FIXTURE_BREAK_ATTACH"]
+  RaiderReporter.singleton_class.prepend(Module.new { def attach(*, **) = raise("attach exploded") })
+end
+
+if ENV["FIXTURE_BREAK_RUNTIME_ATTACH"]
+  Cucumber::Runtime::UserInterface.prepend(Module.new { def attach(*) = raise("cucumber attach exploded") })
+end

@@ -28,3 +28,5 @@ When("I attach a screenshot then fail on the first attempt") do
     raise "flaky"
   end
 end
+When("I log the screenshot path") { log ENV.fetch("FIXTURE_PNG") }
+When("I attach a screenshot pathname") { attach(Pathname.new(ENV.fetch("FIXTURE_PNG")), "image/png") }

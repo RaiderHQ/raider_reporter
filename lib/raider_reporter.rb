@@ -39,6 +39,7 @@ module RaiderReporter
     end
 
     def start_collector!
+      @dry_run = false
       @collector = Collector.new(
         max_attachment_bytes: configuration.max_attachment_bytes,
         warn: ->(message) { warn(message) }

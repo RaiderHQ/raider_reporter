@@ -2,6 +2,7 @@
 
 require "open3"
 require "rbconfig"
+require "raider_reporter/cucumber/formatter"
 
 RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   let(:lib_dir) { File.expand_path("../../../lib", __dir__) }
@@ -375,6 +376,76 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
         expect(stderr).to include("[raider_reporter]")
         expect(status.exitstatus).to eq(base_status.exitstatus)
         expect(normalized(stdout)).to eq(normalized(base_stdout))
+      end
+    end
+  end
+
+  describe "attach capture isolation" do
+    it "ignores a log of an existing path and captures a Pathname attach" do
+      Dir.mktmpdir do |dir|
+        results = run_cucumber("features/attach_edges.feature", mode: "plugin", extra_env: attempt_env(dir))[3]
+
+        expect(results.fetch("Attach edges: Log of a path")["attachments"]).to eq([])
+        expect(results.fetch("Attach edges: Pathname attach")["attachments"].first).to include("name" => "shot.png")
+      end
+    end
+
+    it "still reports everything, with one warning, when installing the attach hook fails" do
+      Dir.mktmpdir do |dir|
+        _out, stderr, status, results = run_cucumber(
+          "features/attach_edges.feature", mode: "plugin",
+                                           extra_env: attempt_env(dir).merge("FIXTURE_BREAK_CAPTURE" => "1")
+        )
+        expect(status.exitstatus).to eq(0), stderr
+        expect(results.size).to eq(3)
+        expect(stderr.scan("[raider_reporter]").size).to eq(1)
+        expect(results.values.flat_map { |r| r["attachments"] }).to eq([])
+      end
+    end
+
+    it "records nothing when cucumber's own attach raises" do
+      Dir.mktmpdir do |dir|
+        results = run_cucumber("features/attach_edges.feature:9", mode: "plugin",
+                                                                  extra_env: attempt_env(dir).merge("FIXTURE_BREAK_RUNTIME_ATTACH" => "1"))[3]
+        result = results.fetch("Attach edges: Cucumber attach file")
+        expect(result["status"]).to eq("failed")
+        expect(result["attachments"]).to eq([])
+      end
+    end
+
+    it "keeps the step passing when RaiderReporter.attach raises inside the capture" do
+      Dir.mktmpdir do |dir|
+        _out, stderr, status, results = run_cucumber(
+          "features/attach_edges.feature:9", mode: "plugin",
+                                             extra_env: attempt_env(dir).merge("FIXTURE_BREAK_ATTACH" => "1")
+        )
+        expect(status.exitstatus).to eq(0), stderr
+        expect(results.fetch("Attach edges: Cucumber attach file")).to include("status" => "passed", "attachments" => [])
+        expect(stderr).to include("[raider_reporter]")
+      end
+    end
+
+    it "passes the return value of attach through unchanged" do
+      base = Class.new { def attach(*) = :cucumber_result }
+      world = Class.new(base) { prepend RaiderReporter::Cucumber::Formatter::AttachCapture }
+
+      expect(world.new.attach("inline", "text/plain")).to eq(:cucumber_result)
+    end
+
+    it "does not leak the dry-run flag into the next run" do
+      Dir.mktmpdir do |dir|
+        bus = Object.new
+        config = Struct.new(:event_bus).new(bus)
+        RaiderReporter.reset!
+        RaiderReporter.configure { |c| c.output_dir = dir }
+        RaiderReporter.dry_run = true
+        RaiderReporter::Cucumber::Formatter.release(config)
+        RaiderReporter.start_collector!.start_run
+        RaiderReporter.finish!(StringIO.new)
+
+        expect(File).to exist(File.join(dir, "run.json"))
+      ensure
+        RaiderReporter.reset!
       end
     end
   end

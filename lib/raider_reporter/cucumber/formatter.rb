@@ -23,8 +23,9 @@ module RaiderReporter
       # Passed to the World's `attach`; reports an existing file as an attachment.
       module AttachCapture
         def attach(file, media_type = nil, filename = nil)
+          result = super
           Formatter.record_attachment(file, media_type)
-          super
+          result
         end
       end
 
@@ -44,6 +45,10 @@ module RaiderReporter
         # Inline text, IO objects and missing paths are ignored: only a file that
         # exists can be copied. Never raises into the user's step.
         def record_attachment(file, media_type)
+          # `log` is attach with this media type; a logged message is not a file.
+          return if media_type.to_s.start_with?("text/x.cucumber.log")
+
+          file = file.to_path if file.respond_to?(:to_path)
           return unless file.is_a?(String) && RaiderReporter.collector&.in_test? && File.file?(file)
 
           RaiderReporter.attach(File.basename(file), file, type: media_type)
@@ -55,6 +60,7 @@ module RaiderReporter
         def release(config)
           bus = config.event_bus
           @claimed.reject! { |claimed| claimed.equal?(bus) }
+          RaiderReporter.dry_run = false
         end
 
         # Cucumber hands steps a World, not the formatter, so `attach` is observed
@@ -86,12 +92,13 @@ module RaiderReporter
         @ast = ::Cucumber::Formatter::AstLookup.new(config)
         @collector = RaiderReporter.start_collector!
         RaiderReporter.dry_run = config.dry_run?
-        self.class.capture_attach
         config.on_event(:test_run_started) { |_event| guard { @collector.start_run } }
         config.on_event(:test_case_started) { |event| guard { case_started(event.test_case) } }
         config.on_event(:test_step_finished) { |event| guard { step_finished(event.test_step, event.result) } }
         config.on_event(:test_case_finished) { |event| guard { case_finished(event.test_case, event.result) } }
         config.on_event(:test_run_finished) { |_event| guard { run_finished } }
+        # Last, and on its own: a broken attach hook may only lose attachments.
+        safely(nil) { self.class.capture_attach }
       end
 
       # Every attempt starts with an empty attachment list.
