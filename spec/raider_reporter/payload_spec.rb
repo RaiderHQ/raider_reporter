@@ -26,9 +26,15 @@ RSpec.describe RaiderReporter::Payload do
     expect(h["schema_version"]).to eq(1)
     expect(h["client_run_id"]).to eq("uuid-1")
     expect(h["run"]).to eq(
-      "started_at" => "2026-10-10T12:00:00Z", "finished_at" => "2026-10-10T12:04:31Z",
+      "started_at" => "2026-10-10T12:00:00.000Z", "finished_at" => "2026-10-10T12:04:31.000Z",
       "git" => { "branch" => "main" }, "environment" => { "ruby" => "4.0.2" }
     )
+  end
+
+  it "keeps sub-second precision in run timestamps" do
+    sub = run.with(started_at: Time.utc(2026, 10, 10, 12, 0, 0.5r), finished_at: Time.utc(2026, 10, 10, 12, 0, 1.25r))
+    h = described_class.new(sub).to_h(mode: :local)
+    expect(h["run"]).to include("started_at" => "2026-10-10T12:00:00.500Z", "finished_at" => "2026-10-10T12:00:01.250Z")
   end
 
   it "omits failure for non-failed results" do

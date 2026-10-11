@@ -42,8 +42,8 @@ module RaiderReporter
 
     def run_hash
       {
-        "started_at" => @run.started_at&.utc&.iso8601,
-        "finished_at" => @run.finished_at&.utc&.iso8601,
+        "started_at" => @run.started_at&.utc&.iso8601(3),
+        "finished_at" => @run.finished_at&.utc&.iso8601(3),
         "ci" => @run.ci,
         "git" => @run.git,
         "environment" => @run.environment
