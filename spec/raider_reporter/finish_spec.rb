@@ -43,6 +43,15 @@ RSpec.describe "RaiderReporter.finish!" do
     expect(out.string).to eq("Raider report: https://raider.test/builds/5\n")
   end
 
+  it "prints the report line to stderr by default and keeps stdout clean" do
+    stub_request(:post, "https://raider.test/api/v1/runs")
+      .to_return(status: 201, body: { run_id: 9, url: "https://raider.test/runs/9" }.to_json)
+    run_one_test
+    expect { RaiderReporter.finish! }
+      .to output("Raider report: https://raider.test/runs/9\n").to_stderr
+      .and output("").to_stdout
+  end
+
   it "falls back to the run URL when the server returns no build" do
     stub_request(:post, "https://raider.test/api/v1/runs")
       .to_return(status: 201, body: { run_id: 9, url: "https://raider.test/runs/9" }.to_json)

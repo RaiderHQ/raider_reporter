@@ -45,7 +45,7 @@ module RaiderReporter
       end
 
       def close(_notification)
-        guard { RaiderReporter.finish!(@output) }
+        guard { RaiderReporter.finish! }
       end
 
       private

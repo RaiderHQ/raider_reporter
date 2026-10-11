@@ -1,0 +1,10 @@
+{
+  "action": "synchronize",
+  "number": 7,
+  "pull_request": {
+    "number": 7,
+    "base": { "ref": "main", "sha": "base111" },
+    "head": { "ref": "feature-x", "sha": "headsha222", "repo": { "full_name": "RaiderHQ/demo", "fork": false } }
+  },
+  "repository": { "full_name": "RaiderHQ/demo", "default_branch": "main" }
+}

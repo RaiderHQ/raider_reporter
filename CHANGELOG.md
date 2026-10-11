@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-10-11
+
+- Report pull request identity: `run.ci.repository`, `run.git.default_branch` and `run.git.pr` (number, base/head branch, head SHA) on `pull_request` and `pull_request_target` events. Requires a Raider server that accepts `git.pr`
+- Add `raider-reporter comment`: posts (and updates) one results comment on the pull request and sets the `raider/tests` commit status; fail-open, always exits 0, skips fork PRs
+- Print the `Raider report: <url>` line to stderr instead of stdout, so stdout-parsing tools (such as `--format json`) stay clean
+- Report the PR head commit's SHA and message on pull request events instead of the merge commit's
+- Harden the GitHub client: only a bot-authored comment starting with the marker is updated, any number of trailing slashes in `GITHUB_API_URL` are accepted, and the token is redacted from error messages
+
 ## 0.2.0 — 2026-10-11
 
 - Report the CI build key, attempt and job so runs of one build are grouped (GitHub Actions)
