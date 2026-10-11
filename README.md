@@ -84,13 +84,43 @@ If both a token and an endpoint are set, the run (plus attachments) is uploaded 
 RAIDER_TOKEN=... RAIDER_ENDPOINT=https://your-raider-server bundle exec rspec
 ```
 
-On success the formatter prints `Raider report: <url>`, using the build URL when the server returns one and the run URL otherwise (or `Raider report uploaded (run <id>)` if the response has no URL). If either value is missing, nothing is uploaded and the local files are still written.
+On success the formatter prints `Raider report: <url>` to stderr (so tools that parse RSpec's stdout, such as `--format json`, stay clean), using the build URL when the server returns one and the run URL otherwise (or `Raider report uploaded (run <id>)` if the response has no URL). If either value is missing, nothing is uploaded and the local files are still written.
 
 An upload carries at most 45 MB of attachments and at most 1000 attachment files. Attachments past that budget are left out of the upload (in order, with one warning) but stay in the local `raider-results/`.
 
 Reporting is fail-open: no error inside the gem, network failure, timeout or non-2xx response will raise or change RSpec's exit status. Each connect/write/read step of the upload times out after 30 seconds. Problems are printed as warnings prefixed with `[raider_reporter]`. An endpoint without `http://` or `https://` (for example `localhost:3000`) produces a warning and nothing is uploaded; a trailing slash is fine.
 
 The hosted Raider service is not public yet; uploads go to a Raider server whose address you provide in `RAIDER_ENDPOINT`.
+
+## Pull request comments
+
+On pull requests, `raider-reporter comment` posts one comment with the build's results (and sets a `raider/tests` commit status on the PR head commit). Run it in a job that runs after your test jobs, so every shard has uploaded:
+
+```yaml
+  raider-comment:
+    needs: [test]   # every test job id
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with: { ruby-version: "3.4", bundler-cache: true }
+      - name: Comment Raider results on the pull request
+        run: bundle exec raider-reporter comment
+        env:
+          RAIDER_TOKEN: ${{ secrets.RAIDER_TOKEN }}
+          RAIDER_ENDPOINT: ${{ vars.RAIDER_ENDPOINT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+- The comment is rendered by the Raider server (`GET /api/v1/builds/summary`); the gem only fetches the Markdown and posts it. The same comment is updated on every run instead of adding a new one.
+- Pull requests from forks are skipped: GitHub gives their workflows a read-only token, so the command prints a notice and exits 0.
+- The command never fails your CI: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`; if one is missing, or the event is not a pull request, it does nothing.
+- It requires a Raider server that supports the summary endpoint and the `git.pr` field. Upgrade the server before using it.
 
 ## Parallel runs
 

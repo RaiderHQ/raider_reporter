@@ -68,7 +68,7 @@ module RaiderReporter
       $stderr.puts("[raider_reporter] #{message}")
     end
 
-    def finish!(output = $stdout)
+    def finish!(output = $stderr)
       return nil if dry_run?
 
       detector = CiDetector.new

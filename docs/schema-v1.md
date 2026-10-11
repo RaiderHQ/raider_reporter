@@ -49,6 +49,11 @@ Rules:
   re-run attempt has a different key, so it is a separate build.
 - `run.shard` is optional: `{ "index": <integer >= 1>, "total": <integer >= 1 or null>, "label": "<job or local>#<n>" or "<job or local>#<matrix>.<process>" }`.
   Present only for sharded runs.
+- `run.ci.repository` is an optional string, e.g. `"RaiderHQ/demo"` (GitHub Actions: `GITHUB_REPOSITORY`).
+- `run.git.default_branch` is an optional string (the repository's default branch).
+- `run.git.pr` is optional and present only on `pull_request` and `pull_request_target` events:
+  `{ "number": <integer >= 1>, "base_branch": "<string>", "head_branch": "<string>", "head_sha": "<string>" }`.
+  On those events `run.git.commit_sha` and `commit_message` describe the PR head commit, not the merge commit.
 - `failure` is present only when `status == "failed"`.
 - `attempts` defaults to 1; read from `rspec-retry` metadata when present.
 - Test identity: `test_key = SHA256("#{file_path}\0#{full_name}")`, computed by
@@ -66,6 +71,18 @@ Responses:
 | Over size limit | 413 | `{ "error": "payload too large" }` |
 
 The response `build` key is additive; older servers omit it and clients then fall back to `url`.
+
+### Build summary (used by `raider-reporter comment`)
+
+`GET /api/v1/builds/summary?build_key=<run.ci.build_key>`, header `Authorization: Bearer <project token>`.
+
+| Case | Status | Body |
+|---|---|---|
+| Found (build of this project) | 200 | `{ "state": "passed" \| "failed" \| "incomplete", "markdown": "…", "url": "https://…/builds/7" }` |
+| Unknown `build_key` for this project | 404 | `{ "error": "not found" }` |
+| Missing/invalid token | 401 | `{ "error": "unauthorized" }` |
+
+The first line of `markdown` is exactly `<!-- raider-reporter:build-comment -->`; the gem uses it to find and update its own comment. The gem sets the commit status `raider/tests` on `git.pr.head_sha` (`passed` → `success`, `failed` → `failure`, `incomplete` → `pending`) with `url` as the target.
 
 The local `raider-results/run.json` uses the same JSON, with `attachments[].path`
 (relative to `raider-results/`) instead of `part`. Sharded runs write
