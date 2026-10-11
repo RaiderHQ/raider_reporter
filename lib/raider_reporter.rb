@@ -12,6 +12,8 @@ require_relative "raider_reporter/writers/local"
 require_relative "raider_reporter/ci_detector"
 require_relative "raider_reporter/shard_detector"
 require_relative "raider_reporter/writers/uploader"
+require_relative "raider_reporter/comment/summary_client"
+require_relative "raider_reporter/comment/github_client"
 
 module RaiderReporter
   class << self
