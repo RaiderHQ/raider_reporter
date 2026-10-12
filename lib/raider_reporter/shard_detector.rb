@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "raider_reporter/azure_env"
+
 module RaiderReporter
   # Identifies which slice of a parallel suite this process is.
   class ShardDetector
@@ -9,7 +11,7 @@ module RaiderReporter
     end
 
     def shard
-      index, total, suffix = composed || explicit || parallel_tests
+      index, total, suffix = composed || outer || parallel_tests
       return nil unless index
 
       { "index" => index, "total" => total, "label" => "#{@job || "local"}##{suffix || index}" }
@@ -19,7 +21,7 @@ module RaiderReporter
 
     # A matrix leg that also runs parallel_tests: every process gets a unique index.
     def composed
-      explicit_index, explicit_total = explicit
+      explicit_index, explicit_total = outer
       parallel_index, = parallel_tests
       groups = positive(@env["PARALLEL_TEST_GROUPS"])
       return nil unless explicit_index && parallel_index && groups
@@ -27,6 +29,18 @@ module RaiderReporter
       [(explicit_index - 1) * groups + parallel_index,
        explicit_total && explicit_total * groups,
        "#{explicit_index}.#{parallel_index}"]
+    end
+
+    def outer
+      explicit || azure_parallel
+    end
+
+    def azure_parallel
+      return nil unless AzureEnv.azure?(@env)
+
+      total = positive(AzureEnv.value(@env, "SYSTEM_TOTALJOBSINPHASE"))
+      index = positive(AzureEnv.value(@env, "SYSTEM_JOBPOSITIONINPHASE"))
+      [index, total] if index && total && total > 1
     end
 
     def explicit

@@ -49,4 +49,30 @@ RSpec.describe RaiderReporter::ShardDetector do
       expect(shard(env.merge("PARALLEL_TEST_GROUPS" => "0"), job: "rspec")["index"]).to eq(2)
     end
   end
+
+  describe "Azure Pipelines" do
+    let(:azure) { { "TF_BUILD" => "True", "SYSTEM_JOBPOSITIONINPHASE" => "2", "SYSTEM_TOTALJOBSINPHASE" => "3" } }
+
+    it "maps the job position within the phase" do
+      expect(shard(azure, job: "tests")).to eq("index" => 2, "total" => 3, "label" => "tests#2")
+    end
+
+    it "ignores a single-job phase" do
+      expect(shard(azure.merge("SYSTEM_TOTALJOBSINPHASE" => "1"))).to be_nil
+    end
+
+    it "is ignored outside Azure" do
+      expect(shard(azure.reject { |k, _| k == "TF_BUILD" })).to be_nil
+    end
+
+    it "lets explicit RAIDER_SHARD_INDEX win" do
+      expect(shard(azure.merge("RAIDER_SHARD_INDEX" => "1", "RAIDER_SHARD_TOTAL" => "5"), job: "t"))
+        .to eq("index" => 1, "total" => 5, "label" => "t#1")
+    end
+
+    it "composes with parallel_tests" do
+      env = azure.merge("TEST_ENV_NUMBER" => "2", "PARALLEL_TEST_GROUPS" => "2")
+      expect(shard(env, job: "tests")).to eq("index" => 4, "total" => 6, "label" => "tests#2.2")
+    end
+  end
 end
