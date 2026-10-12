@@ -4,3 +4,5 @@
 *.gem
 /examples/rspec_basic/raider-results/
 /examples/rspec_basic/Gemfile.lock
+/examples/cucumber_basic/raider-results/
+/examples/cucumber_basic/Gemfile.lock

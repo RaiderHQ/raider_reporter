@@ -55,7 +55,7 @@ Rules:
   `{ "number": <integer >= 1>, "base_branch": "<string>", "head_branch": "<string>", "head_sha": "<string>" }`.
   On those events `run.git.commit_sha` and `commit_message` describe the PR head commit, not the merge commit.
 - `failure` is present only when `status == "failed"`.
-- `attempts` defaults to 1; read from `rspec-retry` metadata when present.
+- `attempts` defaults to 1; read from `rspec-retry` metadata when present (RSpec) or counted from Cucumber's `--retry` attempts.
 - Test identity: `test_key = SHA256("#{file_path}\0#{full_name}")`, computed by
   the server. `identifier` is stored for display only (it changes on reorder).
 - Limits: 50 MB per request, 5 MB per attachment.
@@ -89,3 +89,20 @@ The local `raider-results/run.json` uses the same JSON, with `attachments[].path
 `run-<index>.json` and `attachments-<index>/` instead, so readers should load
 `run*.json`.
 
+
+## Cucumber mapping
+
+Cucumber results use the same fields; there is no schema change.
+
+| Field | Cucumber value |
+|---|---|
+| `file_path` | feature file relative to the project root, e.g. `features/login.feature` (also for `./` and absolute paths) |
+| `full_name` | `"<Feature name>: <Scenario name>"`; outline rows `"<Feature name>: <Scenario name> (<Examples name or 'Examples'>, row <n>)"`, `n` = 1-based data row in that Examples table; when several Examples tables of one outline share a label, each is numbered by position among them (`Examples 1`, `Examples 2`) |
+| `tags` | feature, scenario and Examples tags, merged, sorted, unique, without `@` |
+| `identifier` | `"<file_path>:<line>"` (scenario line, or the Examples row line) |
+| `line_number` | scenario line, or the Examples row line |
+| `status` | passed→passed; failed, ambiguous→failed; pending, undefined→pending; skipped→skipped |
+| `failure.message` | `"<Keyword><step text> (<file>:<line>)\n\n<exception message>"`; `Before hook` / `After hook` replaces the step for hook failures; at most 10,000 characters, UTF-8 scrubbed |
+| `failure.backtrace` | at most 50 lines |
+| `attempts` | number of attempts under `--retry`; only the final attempt is reported |
+| `attachments` | files attached with `RaiderReporter.attach` or Cucumber's `attach(path, media_type)` during the final attempt |

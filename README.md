@@ -1,6 +1,6 @@
 # raider_reporter
 
-Raider-schema test reporting for RSpec. `raider_reporter` is an RSpec formatter that records every example's result, failure details, screenshots and videos, writes them to a local `run.json` (schema v1), and can optionally upload the run to a Raider server. It replaces Allure for Ruby Raider projects.
+Raider-schema test reporting for RSpec and Cucumber. `raider_reporter` is an RSpec formatter and a Cucumber reporter that records every example's result, failure details, screenshots and videos, writes them to a local `run.json` (schema v1), and can optionally upload the run to a Raider server. It replaces Allure for Ruby Raider projects.
 
 It has no runtime dependencies and requires Ruby 3.2 or newer.
 
@@ -26,7 +26,80 @@ Enable the formatter in `.rspec`:
 --format RaiderReporter::RSpec::Formatter
 ```
 
-Run `bundle exec rspec` as usual. Results land in `raider-results/run.json`. A dry run (`rspec --dry-run`) writes and uploads nothing.
+Run `bundle exec rspec` as usual. (For Cucumber, see [Cucumber](#cucumber).) Results land in `raider-results/run.json`. A dry run (`rspec --dry-run`) writes and uploads nothing.
+
+## Cucumber
+
+Requirements: Cucumber 9, 10 or 11 in your own Gemfile (`gem "cucumber"`). It is not a dependency of this gem; requiring `raider_reporter/cucumber` without Cucumber raises a `LoadError` that says so. Cucumber 9.2.1 on Ruby 4 also needs `gem "logger"` in your Gemfile, because Cucumber requires it without declaring it.
+
+### Plugin mode (recommended)
+
+Require the reporter from a file under `features/support/`, for example `features/support/raider.rb`:
+
+```ruby
+require "raider_reporter/cucumber"
+```
+
+Then run Cucumber with any normal formatter and no `--out`:
+
+```
+# cucumber.yml
+default: --format pretty
+```
+
+The require registers one listener on Cucumber's event bus, so it sits next to `pretty`, `progress` or any other formatter. Results land in `raider-results/run.json`, and a dry run (`cucumber --dry-run`) writes and uploads nothing. Plugin mode registers once per Ruby process, because `require` is cached: a second in-process `Cucumber::Cli::Main` run in the same process does not register again.
+
+### Formatter mode
+
+You can also name the formatter explicitly:
+
+```
+cucumber --format pretty --format RaiderReporter::Cucumber::Formatter --out raider-results/cucumber.log
+```
+
+`--out` is required here. Cucumber rejects a second formatter on the same output stream ("All but one formatter must use --out", also in 9.2.1), and this formatter writes nothing to its stream, so give it any file path (it is never created). If both modes are active, only one listener is registered.
+
+### How tests are identified
+
+- `file_path` is relative to the project root (`features/login.feature`), even when Cucumber is given `./features/login.feature` or an absolute path.
+- `full_name` is `"<Feature name>: <Scenario name>"`. Scenario Outline rows are `"<Feature name>: <Scenario name> (<Examples name or 'Examples'>, row <n>)"`, where `n` is the 1-based data row of that Examples table. When two or more Examples tables of one outline share a label (for example two unnamed ones), every table with that label is numbered by its position among them, `(Examples 1, row 1)`, `(Examples 2, row 1)`, so each row keeps a distinct name; tables with a unique label are unchanged.
+- `identifier` is `"<file_path>:<line>"`: the scenario line, or the Examples row line for outline rows.
+- `tags` are the feature, scenario and Examples tags, merged, sorted, unique, without `@`.
+
+Statuses: passed, failed and ambiguous (reported as failed), pending and undefined (reported as pending), skipped.
+
+### Failures
+
+A failed test reports the step that failed, not the whole scenario:
+
+```
+When I fail on purpose (features/login.feature:9)
+
+expected 5, got 4
+```
+
+A failing `Before` or `After` hook is named `Before hook` or `After hook` in place of the step, so an `After` hook that raises after every step passed is still a failed test. Messages are capped at 10,000 characters and backtraces at 50 lines.
+
+### Retries
+
+With `--retry n`, only the final attempt of each scenario is reported, and `attempts` is the number of attempts. Each attempt starts with fresh attachments; attachments from earlier attempts are dropped.
+
+### Attachments
+
+Both of these are captured while a scenario runs:
+
+```ruby
+After do |scenario|
+  attach(path, "image/png") if scenario.failed?        # Cucumber's own attach, with an existing file path (a Pathname works too)
+  RaiderReporter.attach("screenshot", path, type: :png) # or the Raider helper, as in RSpec
+end
+```
+
+Cucumber's `attach` is captured only when given the path of an existing file. Inline data (`attach("some text", "text/plain")`) and `log` messages are ignored.
+
+### Parallel runs with Cucumber
+
+`parallel_tests` works with no configuration for Cucumber too: each process writes `run-<n>.json`. See [Parallel runs](#parallel-runs).
 
 ## Attaching screenshots and videos
 
@@ -183,6 +256,7 @@ Tip: run `rm -rf raider-results` before a parallel run. Each process only cleans
 ## Examples
 
 - `examples/rspec_basic` is a runnable RSpec project with a passing, a failing (with an attachment) and a skipped example. Run it with `cd examples/rspec_basic && bundle install && bundle exec rspec`; the failure is deliberate.
+- `examples/cucumber_basic` is the same for Cucumber (plugin mode): a passing scenario, a failing one with an attachment, and an outline. Run it with `cd examples/cucumber_basic && bundle install && bundle exec cucumber`; the failure is deliberate.
 - `examples/github_actions.yml` shows the workflow steps for CI.
 
 ## Schema
@@ -191,7 +265,7 @@ Tip: run `rm -rf raider-results` before a parallel run. Each process only cleans
 
 ## Contributing
 
-Bug reports and pull requests are welcome at https://github.com/RaiderHQ/raider_reporter. Run `bundle install && bundle exec rake` to run the specs.
+Bug reports and pull requests are welcome at https://github.com/RaiderHQ/raider_reporter. Run `bundle install && bundle exec rake` to run the specs. To test against another Cucumber, set `CUCUMBER_VERSION` (for example `CUCUMBER_VERSION="~> 9.0" bundle update cucumber && bundle exec rspec`).
 
 ## License
 

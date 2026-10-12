@@ -1,5 +1,9 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1" # weekly, to catch new 9.x/10.x/11.x Cucumber releases
 jobs:
   spec:
     runs-on: ubuntu-latest
@@ -7,6 +11,23 @@ jobs:
       fail-fast: false
       matrix:
         ruby: ["3.2", "3.3", "3.4", "4.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - run: bundle exec rspec
+
+  cucumber:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cucumber: ["~> 9.0", "~> 10.0", "~> 11.0"]
+        ruby: ["3.2", "4.0"]
+    env:
+      CUCUMBER_VERSION: ${{ matrix.cucumber }}
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1

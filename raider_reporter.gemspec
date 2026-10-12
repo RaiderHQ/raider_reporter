@@ -7,9 +7,9 @@ Gem::Specification.new do |spec|
   spec.version = RaiderReporter::VERSION
   spec.authors = ["Augustin Gottlieb"]
   spec.email = ["33221555+aguspe@users.noreply.github.com"]
-  spec.summary = "Test reporting for Ruby Raider: local run.json and Raider uploads"
-  spec.description = "RSpec formatter that records results, screenshots and videos in the Raider " \
-                     "schema, writes them locally, and optionally uploads them to a Raider server."
+  spec.summary = "RSpec and Cucumber formatters that write Raider reports locally and upload them to Raider"
+  spec.description = "RSpec and Cucumber formatters that record results, screenshots and videos in the Raider " \
+                     "schema, write them locally, and optionally upload them to a Raider server."
   spec.homepage = "https://github.com/RaiderHQ/raider_reporter"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2"

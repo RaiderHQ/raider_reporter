@@ -2,6 +2,7 @@
 
 require "rspec/core"
 require "raider_reporter"
+require "raider_reporter/text"
 
 module RaiderReporter
   module RSpec
@@ -13,8 +14,8 @@ module RaiderReporter
                                          :example_failed, :example_pending, :close
 
       NON_TAG_KEYS = %i[pending skip].freeze
-      MAX_MESSAGE = 10_000
-      MAX_BACKTRACE = 50
+      MAX_MESSAGE = Text::MAX_MESSAGE
+      MAX_BACKTRACE = Text::MAX_BACKTRACE
 
       def initialize(output)
         @output = output
@@ -77,14 +78,8 @@ module RaiderReporter
         )
       end
 
-      # JSON generation raises on invalid UTF-8, which would lose the whole run.
       def utf8(value)
-        str = value.to_s
-        if [Encoding::UTF_8, Encoding::BINARY, Encoding::US_ASCII].include?(str.encoding)
-          str.dup.force_encoding(Encoding::UTF_8).scrub("?")
-        else
-          str.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: "?")
-        end
+        Text.utf8(value)
       end
 
       def guard
