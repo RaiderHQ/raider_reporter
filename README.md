@@ -231,7 +231,9 @@ jobs:
 ```
 
 - **One-time grant:** give "Contribute to pull requests" to `<Project> Build Service (<org>)` on the repository (Project settings > Repositories > Security). Without it the command prints a notice naming the exact identity and exits 0.
-- **Map secrets explicitly:** Azure does not expose secret variables to scripts automatically. Map `RAIDER_TOKEN` and `System.AccessToken` with `env:` as shown. A variable that is not mapped stays as the literal text `$(...)`; the gem treats it as missing and skips with a notice instead of sending it.
+- **Map secrets explicitly:** Azure does not expose secret variables to scripts automatically. Map `RAIDER_TOKEN` and `System.AccessToken` with `env:` as shown. If a mapped variable is undefined, Azure passes the literal `$(...)`; the gem treats it as missing: results are still written locally but not uploaded, and `raider-reporter comment` prints a skip notice.
+- **Pull request builds:** for Azure Repos, YAML `pr:` triggers are ignored. PR builds (and therefore the comment job) run only when the pipeline is added as a **Build validation** branch policy on the target branch.
+- **Same stage:** keep the comment job in the same stage as the test jobs; the build key includes `System.StageAttempt`.
 - **Azure Repos only:** the PR comment works for repositories hosted in Azure Repos. A GitHub-hosted repository built by Azure Pipelines still uploads results, but `comment` prints `skipped: not an Azure Repos pull request`.
 - **Parallel jobs:** `strategy: parallel: N` shards are detected automatically and grouped into one build, like GitHub matrix jobs.
 - The command never fails your pipeline: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `SYSTEM_ACCESSTOKEN`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`, and requires a Raider server that supports the summary endpoint.

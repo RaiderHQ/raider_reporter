@@ -56,7 +56,7 @@ Rules:
   On those events `run.git.commit_sha` and `commit_message` describe the PR head commit, not the merge commit.
   On Azure Pipelines it is present for Azure Repos pull requests (`Build.Reason == PullRequest`) and its `number` is the PR id.
   An optional `"url"` (an http(s) string) links to the pull request; it is set by GitHub Actions (`<server>/<owner>/<repo>/pull/<n>`) and Azure Pipelines (`<collection>/<project>/_git/<repo>/pullrequest/<id>`) and omitted when it cannot be built.
-- `run.ci.provider` is `github_actions` or `azure_pipelines`. On `azure_pipelines`: `build_url` is the build results page, `build_id` is `Build.BuildId`, `attempt` is `System.StageAttempt` (default `"1"`), `job` is the job display name, `repository` is the repository name, and `build_key` is
+- `run.ci.provider` is `github_actions` or `azure_pipelines`. On `azure_pipelines`: `build_url` is the build results page, `build_id` is `Build.BuildId`, `attempt` is `System.StageAttempt` (default `"1"`), `job` is the job display name, `repository` is `"<project>/<repository>"`, and `build_key` is
   `azure_pipelines:<collection host and path>/<project id>/<repository id>:<build id>:<attempt>`. The key uses ids, not names, so renames and names with spaces do not change it.
   `run.shard` comes from `strategy: parallel` (`System.JobPositionInPhase` / `System.TotalJobsInPhase`) when more than one job runs.
 - `failure` is present only when `status == "failed"`.

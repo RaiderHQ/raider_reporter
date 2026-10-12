@@ -8,6 +8,7 @@
 - Unexpanded Azure macros such as `$(RAIDER_TOKEN)` or `$(System.AccessToken)` are treated as missing instead of being sent as a token
 - Fix: redact the token before truncating error bodies in the GitHub and Azure clients, so a token straddling the 200-character cut can no longer leak partially
 - Notices: the missing-permission notice uses `<project>` when the project name is unknown, and the success notice prints `PR #<n>` when the PR URL is unknown
+- `raider-reporter comment` now runs only on GitHub Actions (`GITHUB_ACTIONS=true`) or Azure Pipelines; elsewhere it prints `skipped: unsupported CI` and exits 0
 - No breaking changes
 
 ## 0.4.0 — 2026-10-11
