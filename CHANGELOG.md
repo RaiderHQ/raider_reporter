@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 — 2026-10-12
+
+- Add Azure Pipelines support: detect the build (`provider: azure_pipelines`, build URL, attempt, job, branch, commit), report Azure Repos pull requests in `run.git.pr`, and derive a stable id-based build key. `strategy: parallel` jobs are detected as shards of one build
+- `raider-reporter comment` now works on Azure Pipelines: it creates or updates one tagged comment thread on the pull request (closed when the build passed) and sets a `raider/tests` PR status. Uses `System.AccessToken` with the PR statuses API version 7.1; the build service needs "Contribute to pull requests" on the repository. GitHub-hosted repositories built by Azure Pipelines are skipped with a notice
+- Schema v1, additive: optional `run.git.pr.url` (set by GitHub Actions and Azure Pipelines)
+- Unexpanded Azure macros such as `$(RAIDER_TOKEN)` or `$(System.AccessToken)` are treated as missing instead of being sent as a token
+- Fix: redact the token before truncating error bodies in the GitHub and Azure clients, so a token straddling the 200-character cut can no longer leak partially
+- Notices: the missing-permission notice uses `<project>` when the project name is unknown, and the success notice prints `PR #<n>` when the PR URL is unknown
+- No breaking changes
+
 ## 0.4.0 — 2026-10-11
 
 - Add a Cucumber reporter (Cucumber >= 9, < 12; not a gem dependency). `require "raider_reporter/cucumber"` from `features/support/` registers it in plugin mode (recommended, works with any `--format` and no `--out`); `--format RaiderReporter::Cucumber::Formatter --out <file>` also works. Using both registers one listener
