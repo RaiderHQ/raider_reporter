@@ -105,7 +105,7 @@ module RaiderReporter
       # One short line: an HTML error page (e.g. a Rails 500) is summarised, anything
       # else is collapsed to one line, redacted, then cut to ERROR_DETAIL_LIMIT.
       def error_message(response)
-        text = response.body.to_s
+        text = response.body.to_s.dup.force_encoding(Encoding::UTF_8).scrub
         detail = if html?(response, text)
                    "the server returned an HTML error page"
                  else

@@ -140,6 +140,13 @@ RSpec.describe RaiderReporter::Writers::Uploader do
     end
   end
 
+  it "keeps the HTTP status when the error body has invalid bytes" do
+    stub_request(:post, url).to_return(status: 500, body: "bad \xFF\xFE bytes".b)
+    Dir.mktmpdir do |dir|
+      expect(described_class.new(config).upload(payload(dir)).error).to start_with("HTTP 500: bad ")
+    end
+  end
+
   it "prints only the status for an empty error body" do
     stub_request(:post, url).to_return(status: 503, body: "")
     Dir.mktmpdir { |dir| expect(described_class.new(config).upload(payload(dir)).error).to eq("HTTP 503") }
