@@ -12,6 +12,7 @@ module RaiderReporter
       # Keeps uploads under the server's 50 MB request limit and multipart part limit.
       MAX_UPLOAD_ATTACHMENT_BYTES = 45 * 1024 * 1024
       MAX_UPLOAD_ATTACHMENTS = 1000
+      ERROR_DETAIL_LIMIT = 200
 
       def initialize(config, timeout: 30, warn: RaiderReporter.method(:warn))
         @config = config
@@ -42,7 +43,7 @@ module RaiderReporter
         end
         to_result(response)
       rescue StandardError => e
-        Result.new(ok: false, url: nil, run_id: nil, build_url: nil, error: "#{e.class}: #{e.message}")
+        Result.new(ok: false, url: nil, run_id: nil, build_url: nil, error: redact("#{e.class}: #{e.message}"))
       end
 
       private
@@ -97,8 +98,29 @@ module RaiderReporter
           Result.new(ok: true, url: present(body["url"]), run_id: present(body["run_id"]),
                      build_url: present(build["url"]), error: nil)
         else
-          Result.new(ok: false, url: nil, run_id: nil, build_url: nil, error: "HTTP #{response.code}: #{response.body.to_s[0, 200]}")
+          Result.new(ok: false, url: nil, run_id: nil, build_url: nil, error: error_message(response))
         end
+      end
+
+      # One short line: an HTML error page (e.g. a Rails 500) is summarised, anything
+      # else is collapsed to one line, redacted, then cut to ERROR_DETAIL_LIMIT.
+      def error_message(response)
+        text = response.body.to_s
+        detail = if html?(response, text)
+                   "the server returned an HTML error page"
+                 else
+                   redact(text).gsub(/\s+/, " ").strip[0, ERROR_DETAIL_LIMIT]
+                 end
+        detail.empty? ? "HTTP #{response.code}" : "HTTP #{response.code}: #{detail}"
+      end
+
+      def html?(response, text)
+        response["Content-Type"].to_s.include?("html") || text.lstrip.start_with?("<")
+      end
+
+      def redact(text)
+        token = @config.token.to_s
+        token.empty? ? text.to_s : text.to_s.gsub(token, "[REDACTED]")
       end
 
       def parse_body(text)
