@@ -195,6 +195,49 @@ On pull requests, `raider-reporter comment` posts one comment with the build's r
 - The command never fails your CI: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`; if one is missing, or the event is not a pull request, it does nothing.
 - It requires a Raider server that supports the summary endpoint and the `git.pr` field. Upgrade the server before using it.
 
+## Azure Pipelines
+
+The gem detects Azure Pipelines when `TF_BUILD` is `true`. It reports the build (`provider: azure_pipelines`, build URL, attempt, job), the branch and commit, the pull request and a build key, so shards of one build group together. On a pull request from Azure Repos, `raider-reporter comment` posts one comment thread with the results and sets a `raider/tests` status on the PR.
+
+```yaml
+jobs:
+  - job: tests
+    steps:
+      - task: UseRubyVersion@0
+        inputs: { versionSpec: '3.4' }
+      - script: bundle install
+        displayName: Install gems
+      - script: bundle exec rspec spec/ --format documentation
+        displayName: Run tests
+        env:
+          RAIDER_TOKEN: $(RAIDER_TOKEN)
+          RAIDER_ENDPOINT: $(RAIDER_ENDPOINT)
+      - task: PublishPipelineArtifact@1
+        condition: always()
+        inputs: { targetPath: raider-results, artifact: raider-results }
+  - job: raider_comment
+    dependsOn: tests
+    condition: and(always(), eq(variables['Build.Reason'], 'PullRequest'))
+    steps:
+      - task: UseRubyVersion@0
+        inputs: { versionSpec: '3.4' }
+      - script: bundle install
+      - script: bundle exec raider-reporter comment
+        displayName: Comment Raider results on the pull request
+        env:
+          RAIDER_TOKEN: $(RAIDER_TOKEN)
+          RAIDER_ENDPOINT: $(RAIDER_ENDPOINT)
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+```
+
+- **One-time grant:** give "Contribute to pull requests" to `<Project> Build Service (<org>)` on the repository (Project settings > Repositories > Security). Without it the command prints a notice naming the exact identity and exits 0.
+- **Map secrets explicitly:** Azure does not expose secret variables to scripts automatically. Map `RAIDER_TOKEN` and `System.AccessToken` with `env:` as shown. If a mapped variable is undefined, Azure passes the literal `$(...)`; the gem treats it as missing: results are still written locally but not uploaded, and `raider-reporter comment` prints a skip notice.
+- **Pull request builds:** for Azure Repos, YAML `pr:` triggers are ignored. PR builds (and therefore the comment job) run only when the pipeline is added as a **Build validation** branch policy on the target branch.
+- **Same stage:** keep the comment job in the same stage as the test jobs; the build key includes `System.StageAttempt`.
+- **Azure Repos only:** the PR comment works for repositories hosted in Azure Repos. A GitHub-hosted repository built by Azure Pipelines still uploads results, but `comment` prints `skipped: not an Azure Repos pull request`.
+- **Parallel jobs:** `strategy: parallel: N` shards are detected automatically and grouped into one build, like GitHub matrix jobs.
+- The command never fails your pipeline: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `SYSTEM_ACCESSTOKEN`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`, and requires a Raider server that supports the summary endpoint.
+
 ## Parallel runs
 
 When a suite is split across several processes or CI jobs, each one uploads its own run. Raider groups runs of the same CI build, so the shards show up together as one build. Each run records its shard (`index`, `total` and a `label`) and, on GitHub Actions, a build key made from the repository, run id and run attempt. A re-run attempt of a workflow is a separate build.

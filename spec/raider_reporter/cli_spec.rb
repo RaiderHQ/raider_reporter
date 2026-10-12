@@ -159,6 +159,171 @@ RSpec.describe RaiderReporter::CLI do
     expect(err.string).to eq("[raider_reporter] comment failed: RuntimeError: kaboom\n")
   end
 
+  describe "Azure Pipelines" do
+    let(:env) do
+      { "TF_BUILD" => "True", "SYSTEM_COLLECTIONURI" => "https://dev.azure.com/raider-test/",
+        "SYSTEM_TEAMPROJECT" => "My Project", "SYSTEM_TEAMPROJECTID" => "6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c",
+        "BUILD_REPOSITORY_NAME" => "web tests", "BUILD_REPOSITORY_ID" => "1c2bd1a0-3f63-4d93-9c3c-2b4f2b1d8f11",
+        "BUILD_REPOSITORY_PROVIDER" => "TfsGit", "BUILD_BUILDID" => "42", "SYSTEM_STAGEATTEMPT" => "2",
+        "SYSTEM_JOBDISPLAYNAME" => "tests", "BUILD_REASON" => "PullRequest",
+        "BUILD_SOURCEBRANCH" => "refs/pull/7/merge", "BUILD_SOURCEVERSION" => "mergesha",
+        "SYSTEM_PULLREQUEST_PULLREQUESTID" => "7", "SYSTEM_PULLREQUEST_SOURCEBRANCH" => "refs/heads/feature/login",
+        "SYSTEM_PULLREQUEST_TARGETBRANCH" => "refs/heads/main", "SYSTEM_PULLREQUEST_SOURCECOMMITID" => "headsha",
+        "SYSTEM_ACCESSTOKEN" => "tok", "RAIDER_TOKEN" => "rt", "RAIDER_ENDPOINT" => "https://raider.test" }
+    end
+    let(:pr_base) do
+      "https://dev.azure.com/raider-test/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/" \
+        "1c2bd1a0-3f63-4d93-9c3c-2b4f2b1d8f11/pullRequests/7"
+    end
+    let(:pr_url) { "https://dev.azure.com/raider-test/My%20Project/_git/web%20tests/pullrequest/7" }
+    let(:build_key) do
+      "azure_pipelines:dev.azure.com/raider-test/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/1c2bd1a0-3f63-4d93-9c3c-2b4f2b1d8f11:42:2"
+    end
+
+    def stub_azure_summary(state: self.state)
+      stub_request(:get, "https://raider.test/api/v1/builds/summary")
+        .with(query: { build_key: build_key }, headers: { "Authorization" => "Bearer rt" })
+        .to_return(status: 200, body: { state: state, markdown: markdown, url: "https://raider.test/b/1" }.to_json)
+    end
+
+    def stub_threads(threads = [])
+      stub_request(:get, "#{pr_base}/threads").with(query: { "api-version" => "7.1" }, headers: { "Authorization" => "Bearer tok" })
+                                              .to_return(status: 200, body: { value: threads }.to_json)
+    end
+
+    def stub_thread_post
+      stub_request(:post, "#{pr_base}/threads").with(query: { "api-version" => "7.1" }).to_return(status: 200, body: "{}")
+    end
+
+    def stub_pr_status
+      stub_request(:post, "#{pr_base}/statuses").with(query: { "api-version" => "7.1" }).to_return(status: 200, body: "{}")
+    end
+
+    {
+      "failed" => %w[active failed],
+      "passed" => %w[closed succeeded],
+      "incomplete" => %w[active pending]
+    }.each do |summary_state, (thread_status, pr_state)|
+      it "maps a #{summary_state} summary to thread #{thread_status} and PR status #{pr_state}" do
+        stub_azure_summary(state: summary_state)
+        stub_threads
+        thread = stub_request(:post, "#{pr_base}/threads").with(query: { "api-version" => "7.1" }) { |r|
+          JSON.parse(r.body)["status"] == thread_status
+        }.to_return(status: 200, body: "{}")
+        status = stub_request(:post, "#{pr_base}/statuses").with(query: { "api-version" => "7.1" }) { |r|
+          body = JSON.parse(r.body)
+          body["state"] == pr_state && body["description"] == "2 failed, 148 passed, 3 skipped" &&
+            body["targetUrl"] == "https://raider.test/b/1"
+        }.to_return(status: 200, body: "{}")
+        expect(run_cli).to eq(0)
+        expect(thread).to have_been_requested
+        expect(status).to have_been_requested
+        expect(err.string).to eq("[raider_reporter] PR thread created: #{pr_url}\n")
+      end
+    end
+
+    it "updates the existing thread in place" do
+      stub_azure_summary
+      marker = RaiderReporter::CLI::MARKER
+      stub_threads([{ id: 11, properties: { "Raider.BuildComment" => {} }, comments: [{ id: 1, content: "#{marker}\nold" }] }])
+      c = stub_request(:patch, "#{pr_base}/threads/11/comments/1").with(query: { "api-version" => "7.1" }).to_return(status: 200, body: "{}")
+      t = stub_request(:patch, "#{pr_base}/threads/11").with(query: { "api-version" => "7.1" }).to_return(status: 200, body: "{}")
+      stub_pr_status
+      expect(run_cli).to eq(0)
+      expect([c, t]).to all(have_been_requested)
+      expect(err.string).to eq("[raider_reporter] PR thread updated: #{pr_url}\n")
+    end
+
+    it "does not use the Azure path for GitHub Actions" do
+      env["GITHUB_ACTIONS"] = "true"
+      env.merge!("GITHUB_TOKEN" => "gh", "GITHUB_REPOSITORY" => "RaiderHQ/demo")
+      expect(run_cli).to eq(0)
+      expect(err.string).to include("skipped: missing GITHUB_EVENT_PATH")
+    end
+
+    it "skips with unsupported CI when neither provider is detected" do
+      expect(described_class.new(["comment"], env: {}, out: out, err: err).run).to eq(0)
+      expect(err.string).to eq("[raider_reporter] skipped: unsupported CI\n")
+    end
+
+    it "names every missing Azure variable" do
+      env.delete("BUILD_REPOSITORY_ID")
+      env["RAIDER_TOKEN"] = "$(RAIDER_TOKEN)"
+      expect(run_cli).to eq(0)
+      expect(err.string).to eq("[raider_reporter] skipped: missing BUILD_REPOSITORY_ID, RAIDER_TOKEN\n")
+    end
+
+    ["$(System.AccessToken)", nil, ""].each do |value|
+      it "explains how to map SYSTEM_ACCESSTOKEN when it is #{value.inspect}" do
+        value.nil? ? env.delete("SYSTEM_ACCESSTOKEN") : env["SYSTEM_ACCESSTOKEN"] = value
+        expect(run_cli).to eq(0)
+        expect(err.string).to include("skipped: missing SYSTEM_ACCESSTOKEN",
+                                      "map it with env: SYSTEM_ACCESSTOKEN: $(System.AccessToken)")
+        expect(a_request(:any, /.*/)).not_to have_been_made
+      end
+    end
+
+    it "skips a push build" do
+      env["BUILD_REASON"] = "IndividualCI"
+      expect(run_cli).to eq(0)
+      expect(err.string).to eq("[raider_reporter] skipped: not an Azure Repos pull request\n")
+    end
+
+    it "skips a GitHub-hosted repo built by Azure without crashing" do
+      env["BUILD_REPOSITORY_PROVIDER"] = "GitHub"
+      expect(run_cli).to eq(0)
+      expect(err.string).to eq("[raider_reporter] skipped: not an Azure Repos pull request\n")
+    end
+
+    it "explains the missing permission on a Forbidden response (dev.azure.com)" do
+      stub_azure_summary
+      stub_request(:get, "#{pr_base}/threads").with(query: hash_including({})).to_return(status: 403, body: "{}")
+      expect(run_cli).to eq(0)
+      expect(err.string).to eq("[raider_reporter] skipped: the build service cannot write to this PR \u2014 grant " \
+                               "\"Contribute to pull requests\" to \"My Project Build Service (raider-test)\"\n")
+    end
+
+    it "uses <project> in the Forbidden notice when SYSTEM_TEAMPROJECT is blank" do
+      env.delete("SYSTEM_TEAMPROJECT")
+      stub_azure_summary
+      stub_request(:get, "#{pr_base}/threads").with(query: hash_including({})).to_return(status: 403, body: "{}")
+      expect(run_cli).to eq(0)
+      expect(err.string).to include("\"<project> Build Service (raider-test)\"")
+    end
+
+    it "prints the PR number when the PR url is unknown" do
+      env.delete("SYSTEM_TEAMPROJECT")
+      stub_azure_summary
+      stub_threads
+      stub_thread_post
+      stub_pr_status
+      expect(run_cli).to eq(0)
+      expect(err.string).to eq("[raider_reporter] PR thread created: PR #7\n")
+    end
+
+    it "derives the org from a visualstudio.com collection" do
+      env["SYSTEM_COLLECTIONURI"] = "https://raider-test.visualstudio.com"
+      stub_request(:get, "https://raider.test/api/v1/builds/summary").with(query: hash_including({}))
+                                                                      .to_return(status: 200, body: { state: "failed", markdown: markdown, url: "u" }.to_json)
+      stub_request(:get, %r{raider-test\.visualstudio\.com/.*/threads}).to_return(status: 403, body: "{}")
+      expect(run_cli).to eq(0)
+      expect(err.string).to include("Build Service (raider-test)")
+    end
+
+    it "reports other client errors as comment failed" do
+      stub_azure_summary
+      stub_request(:get, "#{pr_base}/threads").with(query: hash_including({})).to_return(status: 500, body: "tok oops")
+      expect(run_cli).to eq(0)
+      expect(err.string).to start_with("[raider_reporter] comment failed: RaiderReporter::Comment::AzureClient::Error: HTTP 500")
+      expect(err.string).not_to match(/\btok\b/)
+    end
+
+    it "mentions Azure Pipelines and its variables in --help" do
+      described_class.new(["--help"], env: env, out: out, err: err).run
+      expect(err.string).to include("Azure Pipelines", *RaiderReporter::CLI::AZURE_REQUIRED_ENV)
+    end
+  end
+
   describe "executable" do
     let(:exe) { File.expand_path("../../exe/raider-reporter", __dir__) }
     let(:empty_env) { { "PATH" => ENV.fetch("PATH"), "GEM_HOME" => ENV["GEM_HOME"], "GEM_PATH" => ENV["GEM_PATH"] }.compact }
@@ -174,9 +339,16 @@ RSpec.describe RaiderReporter::CLI do
     end
 
     it "prints a missing-environment notice for `comment` and exits 0" do
-      stdout, stderr, status = run_exe("comment")
+      stdout, stderr, status = Open3.capture3(empty_env.merge("GITHUB_ACTIONS" => "true"), RbConfig.ruby, exe, "comment",
+                                              unsetenv_others: true)
       expect([stdout, status.exitstatus]).to eq(["", 0])
       expect(stderr).to include("[raider_reporter] skipped: missing GITHUB_TOKEN")
+    end
+
+    it "reports unsupported CI for `comment` outside GitHub Actions and Azure Pipelines" do
+      stdout, stderr, status = run_exe("comment")
+      expect([stdout, status.exitstatus]).to eq(["", 0])
+      expect(stderr).to include("[raider_reporter] skipped: unsupported CI")
     end
   end
 end

@@ -171,4 +171,115 @@ RSpec.describe RaiderReporter::CiDetector do
       expect(info["commit_message"]).to eq("Local commit")
     end
   end
+
+  describe "Azure Pipelines" do
+    let(:azure_env) do
+      { "TF_BUILD" => "True", "SYSTEM_COLLECTIONURI" => "https://dev.azure.com/raider-test/",
+        "SYSTEM_TEAMPROJECT" => "My Project", "SYSTEM_TEAMPROJECTID" => "6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c",
+        "BUILD_REPOSITORY_NAME" => "web tests", "BUILD_REPOSITORY_ID" => "1c2bd1a0-3f63-4d93-9c3c-2b4f2b1d8f11",
+        "BUILD_REPOSITORY_PROVIDER" => "TfsGit", "BUILD_BUILDID" => "42", "SYSTEM_STAGEATTEMPT" => "2",
+        "SYSTEM_JOBDISPLAYNAME" => "tests", "BUILD_REASON" => "PullRequest",
+        "BUILD_SOURCEBRANCH" => "refs/pull/7/merge", "BUILD_SOURCEVERSION" => "mergesha",
+        "SYSTEM_PULLREQUEST_PULLREQUESTID" => "7", "SYSTEM_PULLREQUEST_SOURCEBRANCH" => "refs/heads/feature/login",
+        "SYSTEM_PULLREQUEST_TARGETBRANCH" => "refs/heads/main", "SYSTEM_PULLREQUEST_SOURCECOMMITID" => "headsha" }
+    end
+    let(:ci_env) do
+      azure_env.merge("BUILD_REASON" => "IndividualCI", "BUILD_SOURCEBRANCH" => "refs/heads/release/1.2",
+                      "BUILD_SOURCEVERSION" => "abc").reject { |k, _| k.start_with?("SYSTEM_PULLREQUEST") }
+    end
+
+    def detect(env, git_stub = git) = described_class.new(env: env, git: git_stub)
+
+    it "reports ci for an Azure Repos PR build" do
+      expect(detect(azure_env).ci).to eq(
+        "provider" => "azure_pipelines",
+        "build_url" => "https://dev.azure.com/raider-test/My%20Project/_build/results?buildId=42",
+        "build_id" => "42", "attempt" => "2", "job" => "tests",
+        "build_key" => "azure_pipelines:dev.azure.com/raider-test/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/1c2bd1a0-3f63-4d93-9c3c-2b4f2b1d8f11:42:2",
+        "repository" => "My Project/web tests"
+      )
+    end
+
+    it "reports git with the PR url, head sha and HEAD^2 message, without a default branch" do
+      fake = lambda do |*args|
+        { %w[rev-list --parents -n 1 HEAD] => "merge p1 p2", %w[log -1 --format=%s HEAD^2] => "Author's message" }[args] || git.call(*args)
+      end
+      expect(detect(azure_env, fake).git).to eq(
+        "branch" => "feature/login", "commit_sha" => "headsha", "commit_message" => "Author's message",
+        "pr" => { "number" => 7, "base_branch" => "main", "head_branch" => "feature/login", "head_sha" => "headsha",
+                  "url" => "https://dev.azure.com/raider-test/My%20Project/_git/web%20tests/pullrequest/7" }
+      )
+    end
+
+    it "handles a CI (push) build and defaults the attempt to 1" do
+      env = ci_env.tap { |e| e.delete("SYSTEM_STAGEATTEMPT") }
+      detector = detect(env)
+      expect(detector.ci["attempt"]).to eq("1")
+      info = detector.git
+      expect(info).to include("branch" => "release/1.2", "commit_sha" => "abc")
+      expect(info).not_to have_key("pr")
+    end
+
+    it "falls back to git for the branch on a tag build" do
+      detached = ->(*args) { args == %w[rev-parse --abbrev-ref HEAD] ? "HEAD" : git.call(*args) }
+      info = detect(ci_env.merge("BUILD_SOURCEBRANCH" => "refs/tags/v1"), detached).git
+      expect(info).not_to have_key("branch")
+      expect(detect(ci_env.merge("BUILD_SOURCEBRANCH" => "refs/tags/v1")).git["branch"]).to eq("local-branch")
+    end
+
+    it "reports ci but no pr for a GitHub-hosted repo built by Azure" do
+      env = azure_env.merge("BUILD_REPOSITORY_PROVIDER" => "GitHub", "SYSTEM_PULLREQUEST_PULLREQUESTNUMBER" => "9")
+      detector = detect(env)
+      expect(detector.ci["provider"]).to eq("azure_pipelines")
+      expect(detector.git).not_to have_key("pr")
+    end
+
+    it "reports no pr for an invalid pull request id" do
+      %w[abc 0].each do |id|
+        expect(detect(azure_env.merge("SYSTEM_PULLREQUEST_PULLREQUESTID" => id)).git).not_to have_key("pr")
+      end
+    end
+
+    it "supports the legacy visualstudio.com collection without a trailing slash" do
+      ci = detect(azure_env.merge("SYSTEM_COLLECTIONURI" => "https://raider-test.visualstudio.com")).ci
+      expect(ci["build_url"]).to eq("https://raider-test.visualstudio.com/My%20Project/_build/results?buildId=42")
+      expect(ci["build_key"]).to start_with("azure_pipelines:raider-test.visualstudio.com/6ce954b1")
+    end
+
+    it "omits the build key without BUILD_REPOSITORY_ID" do
+      ci = detect(azure_env.tap { |e| e.delete("BUILD_REPOSITORY_ID") }).ci
+      expect(ci).not_to have_key("build_key")
+      expect(ci).to include("build_id" => "42", "provider" => "azure_pipelines")
+    end
+
+    it "treats unexpanded macros as missing" do
+      ci = detect(azure_env.merge("BUILD_REPOSITORY_ID" => "$(Build.Repository.ID)")).ci
+      expect(ci).not_to have_key("build_key")
+    end
+
+    it "prefers GitHub when both providers are set" do
+      env = azure_env.merge("GITHUB_ACTIONS" => "true", "GITHUB_REPOSITORY" => "R/d", "GITHUB_RUN_ID" => "7")
+      expect(detect(env).ci["provider"]).to eq("github_actions")
+    end
+  end
+
+  describe "GitHub PR url" do
+    let(:env) do
+      { "GITHUB_ACTIONS" => "true", "GITHUB_SERVER_URL" => "https://github.com", "GITHUB_REPOSITORY" => "RaiderHQ/demo",
+        "GITHUB_EVENT_NAME" => "pull_request", "GITHUB_HEAD_REF" => "feature-x", "GITHUB_SHA" => "mergesha" }
+    end
+    let(:event) { JSON.parse(File.read(File.expand_path("../fixtures/github_events/pull_request.json", __dir__))) }
+
+    it "adds the pull request url" do
+      pr = described_class.new(env: env, git: git, event_reader: -> { event }).git["pr"]
+      expect(pr["url"]).to eq("https://github.com/RaiderHQ/demo/pull/7")
+    end
+
+    it "omits the url without server url or repository" do
+      %w[GITHUB_SERVER_URL GITHUB_REPOSITORY].each do |key|
+        pr = described_class.new(env: env.reject { |k, _| k == key }, git: git, event_reader: -> { event }).git["pr"]
+        expect(pr).not_to have_key("url")
+      end
+    end
+  end
 end

@@ -56,6 +56,15 @@ RSpec.describe RaiderReporter::Comment::GithubClient do
     expect { client.upsert_comment(7, "b", marker) }.to raise_error(described_class::Error, /500/)
   end
 
+  it "redacts a token that straddles the 200-character boundary before truncating" do
+    stub_request(:get, "#{base}/issues/7/comments").with(query: hash_including({}))
+                                                  .to_return(status: 500, body: ("a" * 197) + "gh" + "z" * 50)
+    expect { client.upsert_comment(7, "b", marker) }
+      .to raise_error(described_class::Error) { |e|
+        expect(e.message).not_to match(/gh/)
+      }
+  end
+
   it "posts a commit status with the description truncated to 140 characters" do
     stub = stub_request(:post, "#{base}/statuses/abc123").with(headers: headers) do |req|
       body = JSON.parse(req.body)

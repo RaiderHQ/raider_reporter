@@ -14,4 +14,11 @@ RSpec.describe RaiderReporter::Configuration do
     expect(described_class.new("RAIDER_TOKEN" => " ", "RAIDER_ENDPOINT" => "https://x").upload?).to be(false)
     expect(described_class.new({}).upload?).to be(false)
   end
+
+  it "treats unexpanded Azure macros as missing" do
+    config = described_class.new("RAIDER_TOKEN" => "$(RAIDER_TOKEN)", "RAIDER_ENDPOINT" => "$(RAIDER_ENDPOINT)")
+    expect([config.token, config.endpoint]).to eq([nil, nil])
+    expect(config.upload?).to be(false)
+    expect(described_class.new("RAIDER_TOKEN" => "$(RAIDER_TOKEN)", "RAIDER_ENDPOINT" => "https://x").upload?).to be(false)
+  end
 end
