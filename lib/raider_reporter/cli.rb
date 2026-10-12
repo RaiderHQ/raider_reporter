@@ -120,7 +120,7 @@ module RaiderReporter
       result = azure.upsert_thread(summary.markdown, MARKER, status: THREAD_STATUS.fetch(summary.state, "active"))
       azure.set_status(state: AZURE_STATES.fetch(summary.state, "pending"), description: description(summary),
                        target_url: summary.url)
-      notice("PR thread #{result}: #{pr['url']}")
+      notice("PR thread #{result}: #{pr['url'] || "PR ##{pr['number']}"}")
     end
 
     def azure_pr_url(pr)
@@ -129,7 +129,7 @@ module RaiderReporter
     end
 
     def azure_forbidden_message
-      project = AzureEnv.value(@env, "SYSTEM_TEAMPROJECT")
+      project = AzureEnv.value(@env, "SYSTEM_TEAMPROJECT") || "<project>"
       "skipped: the build service cannot write to this PR — grant \"Contribute to pull requests\" to " \
         "\"#{project} Build Service (#{azure_org})\""
     end

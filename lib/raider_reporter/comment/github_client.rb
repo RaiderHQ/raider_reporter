@@ -101,7 +101,7 @@ module RaiderReporter
       def handle(response)
         code = response.code.to_i
         raise Forbidden, "HTTP #{code}" if [403, 404].include?(code)
-        raise Error, redact("HTTP #{code}: #{response.body.to_s[0, 200]}") unless (200..299).cover?(code)
+        raise Error, "HTTP #{code}: #{redact(response.body.to_s)[0, 200]}" unless (200..299).cover?(code)
 
         JSON.parse(response.body.to_s)
       rescue JSON::ParserError

@@ -283,6 +283,24 @@ RSpec.describe RaiderReporter::CLI do
                                "\"Contribute to pull requests\" to \"My Project Build Service (raider-test)\"\n")
     end
 
+    it "uses <project> in the Forbidden notice when SYSTEM_TEAMPROJECT is blank" do
+      env.delete("SYSTEM_TEAMPROJECT")
+      stub_azure_summary
+      stub_request(:get, "#{pr_base}/threads").with(query: hash_including({})).to_return(status: 403, body: "{}")
+      expect(run_cli).to eq(0)
+      expect(err.string).to include("\"<project> Build Service (raider-test)\"")
+    end
+
+    it "prints the PR number when the PR url is unknown" do
+      env.delete("SYSTEM_TEAMPROJECT")
+      stub_azure_summary
+      stub_threads
+      stub_thread_post
+      stub_pr_status
+      expect(run_cli).to eq(0)
+      expect(err.string).to eq("[raider_reporter] PR thread created: PR #7\n")
+    end
+
     it "derives the org from a visualstudio.com collection" do
       env["SYSTEM_COLLECTIONURI"] = "https://raider-test.visualstudio.com"
       stub_request(:get, "https://raider.test/api/v1/builds/summary").with(query: hash_including({}))

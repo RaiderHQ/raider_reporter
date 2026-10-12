@@ -122,6 +122,15 @@ RSpec.describe RaiderReporter::Comment::AzureClient do
     expect { client.upsert_thread(md, marker, status: "active") }.to raise_error(described_class::Error)
   end
 
+  it "redacts a token that straddles the 200-character boundary before truncating" do
+    stub_request(:get, "#{base}/threads").with(query: hash_including({}))
+                                         .to_return(status: 500, body: ("a" * 195) + "tok-secret" + "z" * 50)
+    expect { client.upsert_thread(md, marker, status: "active") }
+      .to raise_error(described_class::Error) { |e|
+        expect(e.message).not_to include("tok-", "secret")
+      }
+  end
+
   it "raises Error on invalid JSON" do
     stub_request(:get, "#{base}/threads").with(query: hash_including({})).to_return(status: 200, body: "<html>")
     expect { client.upsert_thread(md, marker, status: "active") }.to raise_error(described_class::Error, /invalid JSON/)
