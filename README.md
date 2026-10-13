@@ -214,7 +214,7 @@ jobs:
           RAIDER_ENDPOINT: $(RAIDER_ENDPOINT)
       - task: PublishPipelineArtifact@1
         condition: always()
-        inputs: { targetPath: raider-results, artifact: raider-results }
+        inputs: { targetPath: raider-results, artifact: raider-results-$(System.JobPositionInPhase)-$(System.JobAttempt) }
   - job: raider_comment
     dependsOn: tests
     condition: and(always(), eq(variables['Build.Reason'], 'PullRequest'))
@@ -234,6 +234,7 @@ jobs:
 - **Map secrets explicitly:** Azure does not expose secret variables to scripts automatically. Map `RAIDER_TOKEN` and `System.AccessToken` with `env:` as shown. If a mapped variable is undefined, Azure passes the literal `$(...)`; the gem treats it as missing: results are still written locally but not uploaded, and `raider-reporter comment` prints a skip notice.
 - **Pull request builds:** for Azure Repos, YAML `pr:` triggers are ignored. PR builds (and therefore the comment job) run only when the pipeline is added as a **Build validation** branch policy on the target branch.
 - **Same stage:** keep the comment job in the same stage as the test jobs; the build key includes `System.StageAttempt`.
+- **Artifact names:** pipeline artifacts cannot be overwritten within a run, so the name includes the job position and attempt. A fixed name would fail when you re-run failed jobs or use `strategy: parallel`.
 - **Azure Repos only:** the PR comment works for repositories hosted in Azure Repos. A GitHub-hosted repository built by Azure Pipelines still uploads results, but `comment` prints `skipped: not an Azure Repos pull request`.
 - **Parallel jobs:** `strategy: parallel: N` shards are detected automatically and grouped into one build, like GitHub matrix jobs.
 - The command never fails your pipeline: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `SYSTEM_ACCESSTOKEN`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`, and requires a Raider server that supports the summary endpoint.

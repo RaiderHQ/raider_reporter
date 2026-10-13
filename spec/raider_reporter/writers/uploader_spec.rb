@@ -111,6 +111,54 @@ RSpec.describe RaiderReporter::Writers::Uploader do
     end
   end
 
+  it "summarises an HTML error page instead of printing it" do
+    html = "<!DOCTYPE html>\n<html>\n<head><title>Action Controller: Exception caught</title></head>\n" \
+           "<body>#{'<div>trace</div>' * 200}</body></html>"
+    stub_request(:post, url).to_return(status: 500, body: html, headers: { "Content-Type" => "text/html; charset=utf-8" })
+    Dir.mktmpdir do |dir|
+      error = described_class.new(config).upload(payload(dir)).error
+      expect(error).to eq("HTTP 500: the server returned an HTML error page")
+    end
+  end
+
+  it "detects an HTML body without a Content-Type header" do
+    stub_request(:post, url).to_return(status: 502, body: "  <html><body>Bad gateway</body></html>")
+    Dir.mktmpdir do |dir|
+      expect(described_class.new(config).upload(payload(dir)).error).to eq("HTTP 502: the server returned an HTML error page")
+    end
+  end
+
+  it "keeps a non-HTML error on one line, at most 200 characters, with the token redacted" do
+    body = "boom secret\n#{'x' * 500}"
+    stub_request(:post, url).to_return(status: 422, body: body)
+    Dir.mktmpdir do |dir|
+      error = described_class.new(config).upload(payload(dir)).error
+      expect(error).to start_with("HTTP 422: boom [REDACTED] xxx")
+      expect(error).not_to include("secret")
+      expect(error).not_to include("\n")
+      expect(error.length).to be <= "HTTP 422: ".length + 200
+    end
+  end
+
+  it "keeps the HTTP status when the error body has invalid bytes" do
+    stub_request(:post, url).to_return(status: 500, body: "bad \xFF\xFE bytes".b)
+    Dir.mktmpdir do |dir|
+      expect(described_class.new(config).upload(payload(dir)).error).to start_with("HTTP 500: bad ")
+    end
+  end
+
+  it "prints only the status for an empty error body" do
+    stub_request(:post, url).to_return(status: 503, body: "")
+    Dir.mktmpdir { |dir| expect(described_class.new(config).upload(payload(dir)).error).to eq("HTTP 503") }
+  end
+
+  it "redacts the token from exception messages" do
+    stub_request(:post, url).to_raise(StandardError.new("connection reset while sending secret"))
+    Dir.mktmpdir do |dir|
+      expect(described_class.new(config).upload(payload(dir)).error).to eq("StandardError: connection reset while sending [REDACTED]")
+    end
+  end
+
   it "reports timeouts without raising" do
     stub_request(:post, url).to_timeout
     Dir.mktmpdir { |dir| expect(described_class.new(config).upload(payload(dir)).error).to match(/timeout|Timeout/) }

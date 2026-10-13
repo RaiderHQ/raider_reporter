@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 — 2026-10-13
+
+- Fix: a failed upload now reports one short line. An HTML error page (for example a server 500) is summarised as `the server returned an HTML error page` instead of being printed, other bodies are collapsed to one line of at most 200 characters, and the token is redacted from upload errors, including exception messages
+- Docs: the Azure Pipelines snippet publishes `raider-results-$(System.JobPositionInPhase)-$(System.JobAttempt)`, so re-running failed jobs or `strategy: parallel` no longer collides on the artifact name
+
 ## 0.5.0 — 2026-10-12
 
 - Add Azure Pipelines support: detect the build (`provider: azure_pipelines`, build URL, attempt, job, branch, commit), report Azure Repos pull requests in `run.git.pr`, and derive a stable id-based build key. `strategy: parallel` jobs are detected as shards of one build
