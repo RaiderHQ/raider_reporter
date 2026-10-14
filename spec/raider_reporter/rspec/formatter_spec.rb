@@ -2,6 +2,7 @@
 
 require "open3"
 require "rbconfig"
+require "raider_reporter/rspec/formatter"
 
 RSpec.describe "RaiderReporter::RSpec::Formatter" do
   let(:lib_dir) { File.expand_path("../../../lib", __dir__) }
@@ -63,6 +64,20 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
 
       expect(failure["message"]).to include("expected: 2"), output
       expect(failure).not_to have_key("app_frame")
+    end
+  end
+
+  it "uses the first sub-exception's backtrace when an aggregate exception has none" do
+    Dir.mktmpdir do |dir|
+      file = File.join(File.realpath(dir), "helper.rb")
+      File.write(file, "")
+      sub = StandardError.new("inner")
+      sub.set_backtrace(["#{file}:3:in 'block'"])
+      aggregate = Class.new(StandardError) { define_method(:all_exceptions) { [sub] } }.new("many")
+      formatter = RaiderReporter::RSpec::Formatter.allocate
+      allow(RaiderReporter).to receive(:project_root).and_return(File.realpath(dir))
+
+      expect(formatter.send(:app_frame_for, aggregate)).to eq("helper.rb:3:in 'block'")
     end
   end
 

@@ -80,8 +80,16 @@ module RaiderReporter
       end
 
       # From the raw backtrace: RSpec's formatter strips gem and project-support frames.
+      # MultipleExceptionError (aggregate_failures) has no backtrace of its own.
+      def raw_backtrace(exception)
+        return exception.backtrace if exception.backtrace
+        return nil unless exception.respond_to?(:all_exceptions)
+
+        exception.all_exceptions.first&.backtrace
+      end
+
       def app_frame_for(exception)
-        AppFrame.from(exception.backtrace, root: RaiderReporter.project_root || Dir.pwd)
+        AppFrame.from(raw_backtrace(exception), root: RaiderReporter.project_root || Dir.pwd)
       rescue StandardError
         nil
       end

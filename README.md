@@ -78,7 +78,7 @@ When I fail on purpose (features/login.feature:9)
 expected 5, got 4
 ```
 
-A failing `Before` or `After` hook is named `Before hook` or `After hook` in place of the step, so an `After` hook that raises after every step passed is still a failed test. Messages are capped at 10,000 characters and backtraces at 50 lines. Each failure also carries `app_frame`, the first backtrace line inside your project (for example `spec/pages/login_page.rb:42:in 'LoginPage#submit'`), which Raider uses to group failures with the same error.
+A failing `Before` or `After` hook is named `Before hook` or `After hook` in place of the step, so an `After` hook that raises after every step passed is still a failed test. Messages are capped at 10,000 characters and backtraces at 50 lines.
 
 ### Retries
 
@@ -305,7 +305,7 @@ Tip: run `rm -rf raider-results` before a parallel run. Each process only cleans
 
 ## Schema
 
-`run.json` follows schema v1, documented in [docs/schema-v1.md](docs/schema-v1.md). Statuses are exactly `passed`, `failed`, `pending` and `skipped`.
+`run.json` follows schema v1, documented in [docs/schema-v1.md](docs/schema-v1.md). Statuses are exactly `passed`, `failed`, `pending` and `skipped`. In both RSpec and Cucumber, a failure may carry `app_frame` (when a project frame is found): the first backtrace line inside your project, for example `spec/pages/login_page.rb:42:in 'LoginPage#submit'`, which Raider uses to group failures with the same error.
 
 ## Contributing
 
