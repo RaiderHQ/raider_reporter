@@ -2,6 +2,7 @@
 
 require "open3"
 require "rbconfig"
+require "raider_reporter/rspec/formatter"
 
 RSpec.describe "RaiderReporter::RSpec::Formatter" do
   let(:lib_dir) { File.expand_path("../../../lib", __dir__) }
@@ -41,6 +42,42 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
       expect(results[2]["attempts"]).to eq(2)
       expect(results.map { |r| r["full_name"] }).to include("Sample passes")
       expect(results[5]["failure"]["message"]).to eq("bad ? bytes")
+    end
+  end
+
+  it "reports the first project frame from the raw backtrace as app_frame" do
+    Dir.mktmpdir do |dir|
+      run_suite(dir)
+      results = JSON.parse(File.read(File.join(dir, "raider-results", "run.json")))["results"].sort_by { |r| r["line_number"] }
+
+      expect(results[1]["failure"]["app_frame"]).to match(/\Asample_spec\.rb:\d+:in /)
+      expect(results[5]["failure"]["app_frame"]).to match(/\Asample_spec\.rb:\d+:in /)
+    end
+  end
+
+  it "still reports the failure when AppFrame.from raises" do
+    Dir.mktmpdir do |dir|
+      boom = File.join(dir, "boom.rb")
+      File.write(boom, "require 'raider_reporter'\nRaiderReporter::AppFrame.define_singleton_method(:from) { |*, **| raise 'nope' }\n")
+      output, = run_suite(dir, {}, ["--require", boom])
+      failure = JSON.parse(File.read(File.join(dir, "raider-results", "run.json")))["results"].find { |r| r["status"] == "failed" }["failure"]
+
+      expect(failure["message"]).to include("expected: 2"), output
+      expect(failure).not_to have_key("app_frame")
+    end
+  end
+
+  it "uses the first sub-exception's backtrace when an aggregate exception has none" do
+    Dir.mktmpdir do |dir|
+      file = File.join(File.realpath(dir), "helper.rb")
+      File.write(file, "")
+      sub = StandardError.new("inner")
+      sub.set_backtrace(["#{file}:3:in 'block'"])
+      aggregate = Class.new(StandardError) { define_method(:all_exceptions) { [sub] } }.new("many")
+      formatter = RaiderReporter::RSpec::Formatter.allocate
+      allow(RaiderReporter).to receive(:project_root).and_return(File.realpath(dir))
+
+      expect(formatter.send(:app_frame_for, aggregate)).to eq("helper.rb:3:in 'block'")
     end
   end
 

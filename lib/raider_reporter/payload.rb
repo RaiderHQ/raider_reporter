@@ -73,11 +73,13 @@ module RaiderReporter
     end
 
     def failure_hash(failure)
-      {
+      hash = {
         "message" => failure.message,
         "exception_class" => failure.exception_class,
         "backtrace" => failure.backtrace
       }
+      hash["app_frame"] = failure.app_frame if failure.app_frame
+      hash
     end
 
     def attachment_hash(entry, mode)

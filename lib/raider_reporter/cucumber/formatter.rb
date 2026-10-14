@@ -199,8 +199,15 @@ module RaiderReporter
         Failure.new(
           message: Text.utf8("#{step_label(step_info, test_case)}\n\n#{exception.message}")[0, Text::MAX_MESSAGE],
           exception_class: Text.utf8(exception.class.name),
-          backtrace: (exception.backtrace || []).first(Text::MAX_BACKTRACE).map { |line| Text.utf8(line) }
+          backtrace: (exception.backtrace || []).first(Text::MAX_BACKTRACE).map { |line| Text.utf8(line) },
+          app_frame: app_frame_for(exception)
         )
+      end
+
+      def app_frame_for(exception)
+        AppFrame.from(exception.backtrace, root: RaiderReporter.project_root || Dir.pwd)
+      rescue StandardError
+        nil
       end
 
       def step_label(step_info, test_case)

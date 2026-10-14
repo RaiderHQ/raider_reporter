@@ -74,8 +74,24 @@ module RaiderReporter
         Failure.new(
           message: utf8(exception.message)[0, MAX_MESSAGE],
           exception_class: utf8(exception.class.name),
-          backtrace: backtrace.first(MAX_BACKTRACE).map { |line| utf8(line) }
+          backtrace: backtrace.first(MAX_BACKTRACE).map { |line| utf8(line) },
+          app_frame: app_frame_for(exception)
         )
+      end
+
+      # From the raw backtrace: RSpec's formatter strips gem and project-support frames.
+      # MultipleExceptionError (aggregate_failures) has no backtrace of its own.
+      def raw_backtrace(exception)
+        return exception.backtrace if exception.backtrace
+        return nil unless exception.respond_to?(:all_exceptions)
+
+        exception.all_exceptions.first&.backtrace
+      end
+
+      def app_frame_for(exception)
+        AppFrame.from(raw_backtrace(exception), root: RaiderReporter.project_root || Dir.pwd)
+      rescue StandardError
+        nil
       end
 
       def utf8(value)

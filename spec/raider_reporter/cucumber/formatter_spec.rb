@@ -81,6 +81,23 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       expect(result["failure"]["backtrace"].size).to be_between(1, 50)
     end
 
+    it "reports the step definition frame as app_frame" do
+      failure = results.fetch("Login: A user is rejected")["failure"]
+      expect(failure["app_frame"]).to match(%r{\Afeatures/step_definitions/steps\.rb:\d+:in })
+    end
+
+    it "still reports the failure when AppFrame.from raises" do
+      boom = File.join(fixture_dir, "features/support/zz_boom.rb")
+      File.write(boom, "RaiderReporter::AppFrame.define_singleton_method(:from) { |*, **| raise 'nope' }\n")
+      begin
+        failure = run_cucumber("features/login.feature")[3].fetch("Login: A user is rejected")["failure"]
+        expect(failure["message"]).to end_with("bad credentials")
+        expect(failure).not_to have_key("app_frame")
+      ensure
+        FileUtils.rm_f(boom)
+      end
+    end
+
     it "maps pending and undefined steps to pending without a failure" do
       %w[pending undefined].each do |kind|
         result = results.fetch("Login: A step is #{kind}")
