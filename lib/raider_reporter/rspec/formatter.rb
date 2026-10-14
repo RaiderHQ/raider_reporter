@@ -74,8 +74,16 @@ module RaiderReporter
         Failure.new(
           message: utf8(exception.message)[0, MAX_MESSAGE],
           exception_class: utf8(exception.class.name),
-          backtrace: backtrace.first(MAX_BACKTRACE).map { |line| utf8(line) }
+          backtrace: backtrace.first(MAX_BACKTRACE).map { |line| utf8(line) },
+          app_frame: app_frame_for(exception)
         )
+      end
+
+      # From the raw backtrace: RSpec's formatter strips gem and project-support frames.
+      def app_frame_for(exception)
+        AppFrame.from(exception.backtrace, root: RaiderReporter.project_root || Dir.pwd)
+      rescue StandardError
+        nil
       end
 
       def utf8(value)

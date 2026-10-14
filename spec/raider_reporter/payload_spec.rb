@@ -53,6 +53,16 @@ RSpec.describe RaiderReporter::Payload do
     )
   end
 
+  it "includes app_frame in the failure only when present" do
+    with_frame = failed.with(failure: failed.failure.with(app_frame: "spec/a_spec.rb:3:in 'block'"))
+    run_with = run.with(results: [with_frame])
+    expect(described_class.new(run_with).to_h(mode: :local)["results"][0]["failure"]).to eq(
+      "message" => "boom", "exception_class" => "RuntimeError", "backtrace" => ["a.rb:1"],
+      "app_frame" => "spec/a_spec.rb:3:in 'block'"
+    )
+    expect(payload.to_h(mode: :local)["results"][1]["failure"]).not_to have_key("app_frame")
+  end
+
   it "references attachments by path in local mode" do
     atts = payload.to_h(mode: :local)["results"][1]["attachments"]
     expect(atts).to eq([

@@ -5,6 +5,7 @@ require "rbconfig"
 require_relative "raider_reporter/version"
 require_relative "raider_reporter/text"
 require_relative "raider_reporter/models"
+require_relative "raider_reporter/app_frame"
 require_relative "raider_reporter/payload"
 require_relative "raider_reporter/configuration"
 require_relative "raider_reporter/content_types"
@@ -19,7 +20,7 @@ require_relative "raider_reporter/comment/azure_client"
 
 module RaiderReporter
   class << self
-    attr_reader :collector
+    attr_reader :collector, :project_root
 
     def configuration
       @configuration ||= Configuration.new
@@ -37,10 +38,12 @@ module RaiderReporter
       @collector&.cleanup
       @configuration = nil
       @collector = nil
+      @project_root = nil
     end
 
     def start_collector!
       @dry_run = false
+      @project_root = Dir.pwd
       @collector = Collector.new(
         max_attachment_bytes: configuration.max_attachment_bytes,
         warn: ->(message) { warn(message) }

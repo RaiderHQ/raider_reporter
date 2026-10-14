@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 — 2026-10-15
+
+- Schema v1, additive: optional `failure.app_frame`, the first line of the raw exception backtrace that lies inside the project root (`Dir.pwd` when the reporter starts), outside `vendor/`, `.bundle/`, `Gem.path` and Ruby's library directory, and not `<internal:...>`. The path is made project-relative and the rest of the line is unchanged, e.g. `spec/pages/login_page.rb:42:in 'LoginPage#submit'`; at most 500 characters. The key is omitted when no line qualifies or computing it fails, so payloads without it are unchanged. Raider uses it to group failures by error
+- Reported by both the RSpec and Cucumber reporters
+- No breaking changes
+
 ## 0.5.1 — 2026-10-13
 
 - Fix: a failed upload now reports one short line. An HTML error page (for example a server 500) is summarised as `the server returned an HTML error page` instead of being printed, other bodies are collapsed to one line of at most 200 characters, and the token is redacted from upload errors, including exception messages
