@@ -86,4 +86,21 @@ RSpec.describe RaiderReporter::Writers::Local do
       expect(File.read(File.join(dir, "index.html"))).to eq("<html>mine</html>")
     end
   end
+
+  it "still writes run.json when its own index.html is unreadable" do
+    skip "root ignores file modes" if Process.uid.zero?
+    Dir.mktmpdir do |dir|
+      config = RaiderReporter::Configuration.new({})
+      config.output_dir = dir
+      index = File.join(dir, "index.html")
+      File.write(index, "<html>#{RaiderReporter::Writers::Html::MARKER}</html>")
+      File.chmod(0o000, index)
+      begin
+        path = described_class.new(config).write(RaiderReporter::Payload.new(run_with([])))
+        expect(File).to exist(path)
+      ensure
+        File.chmod(0o644, index)
+      end
+    end
+  end
 end

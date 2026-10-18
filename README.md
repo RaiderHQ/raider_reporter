@@ -136,7 +136,7 @@ end
 | `token` | `ENV["RAIDER_TOKEN"]` | API token used for uploads. |
 | `endpoint` | `ENV["RAIDER_ENDPOINT"]` | Base URL of the Raider server to upload to. |
 | `output_dir` | `"raider-results"` | Directory for local output. |
-| `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory (`run-<n>.json` and `attachments-<n>/` when sharded) inside `output_dir` before writing. Nothing else in `output_dir` is touched. |
+| `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory (`run-<n>.json` and `attachments-<n>/` when sharded) inside `output_dir` before writing. Nothing else in `output_dir` is touched, except a raider_reporter-written `index.html`. |
 | `html_report` | `true` | Write `index.html`, the local HTML report, into `output_dir` after each run. See [Local report](#local-report). |
 | `environment` | `{}` | Free-form key/values stored with the run (browser, suite name, and so on). Values are JSON values: strings, booleans or numbers. |
 
@@ -158,7 +158,7 @@ Every run also writes `raider-results/index.html`: one self-contained page (inli
 Rebuild it from the run files on disk, for example after `parallel_rspec` has written one file per shard:
 
 ```
-raider-reporter report [dir]   # default: raider-results; prints the path, exits 1 when there are no run files
+raider-reporter report [dir]   # default: raider-results; prints the path, exits 1 when there are no run files or the report cannot be written
 ```
 
 Set `config.html_report = false` to turn it off. An `index.html` that raider_reporter did not write is never overwritten or removed; a warning is printed instead.

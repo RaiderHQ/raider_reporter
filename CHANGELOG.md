@@ -3,7 +3,7 @@
 ## 0.7.0 — 2026-10-18
 
 - Add a local HTML report: every run now also writes `raider-results/index.html`, one self-contained page (inline CSS and JS, no network requests) built from every `run*.json` in the folder, so shards from one machine share a report. Failures come first with their message, exception class, backtrace and screenshots; a filter box narrows by test name or file. Open it in a browser after a run, or publish it as a CI artifact
-- `raider-reporter report [dir]` rebuilds the report from the run files on disk (default `raider-results`); exits 1 when there are none
+- `raider-reporter report [dir]` rebuilds the report from the run files on disk (default `raider-results`); exits 1 when there are no run files or the report cannot be written
 - `config.html_report = false` turns the report off. An existing `index.html` that raider_reporter did not write is never overwritten or removed; a warning is printed instead
 - Fail-open: a report error prints `[raider_reporter] HTML report failed: …` and leaves `run.json`, the upload and the exit status unchanged
 - No breaking changes

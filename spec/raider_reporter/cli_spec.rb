@@ -52,6 +52,7 @@ RSpec.describe RaiderReporter::CLI do
     expect(described_class.new(["--help"], env: env, out: out, err: err).run).to eq(0)
     expect(described_class.new([], env: env, out: out, err: err).run).to eq(0)
     expect(err.string.scan("Usage: raider-reporter comment").size).to eq(2)
+    expect(err.string).to include("Usage: raider-reporter report [dir]")
   end
 
   it "skips with a notice when the event is not a pull request" do
@@ -371,6 +372,7 @@ RSpec.describe RaiderReporter::CLI do
 
         expect(code).to eq(1)
         expect(err.string).to include("no run*.json in")
+        expect(out.string).to eq("")
       end
     end
 
@@ -383,6 +385,7 @@ RSpec.describe RaiderReporter::CLI do
 
         expect(code).to eq(1)
         expect(err.string).to include("report failed", "not written by raider_reporter")
+        expect(out.string).to eq("")
       end
     end
 

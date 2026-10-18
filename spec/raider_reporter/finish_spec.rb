@@ -126,5 +126,16 @@ RSpec.describe "RaiderReporter.finish!" do
         .to output(/\[raider_reporter\] HTML report failed: IOError: disk full/).to_stderr
       expect(File).to exist(File.join(results_dir, "run.json"))
     end
+
+    it "still uploads and prints the success line when the report fails" do
+      RaiderReporter.configuration.token = "secret"
+      stub_request(:post, "https://raider.test/api/v1/runs")
+        .to_return(status: 201, body: { run_id: 9, url: "https://raider.test/runs/9" }.to_json)
+      allow_any_instance_of(RaiderReporter::Writers::Html).to receive(:write).and_raise(IOError, "disk full")
+      run_one_test
+
+      expect { RaiderReporter.finish!(out) }.to output(/HTML report failed/).to_stderr
+      expect(out.string).to include("Raider report: https://raider.test/runs/9")
+    end
   end
 end

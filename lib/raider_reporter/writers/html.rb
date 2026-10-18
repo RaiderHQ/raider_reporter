@@ -21,6 +21,8 @@ module RaiderReporter
 
       def self.ours?(path)
         File.file?(path) && File.read(path, 4096).to_s.include?(MARKER)
+      rescue SystemCallError
+        false
       end
 
       def write(dir)
