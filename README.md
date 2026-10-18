@@ -137,6 +137,7 @@ end
 | `endpoint` | `ENV["RAIDER_ENDPOINT"]` | Base URL of the Raider server to upload to. |
 | `output_dir` | `"raider-results"` | Directory for local output. |
 | `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory (`run-<n>.json` and `attachments-<n>/` when sharded) inside `output_dir` before writing. Nothing else in `output_dir` is touched. |
+| `html_report` | `true` | Write `index.html`, the local HTML report, into `output_dir` after each run. See [Local report](#local-report). |
 | `environment` | `{}` | Free-form key/values stored with the run (browser, suite name, and so on). Values are JSON values: strings, booleans or numbers. |
 
 ## Local output
@@ -145,9 +146,22 @@ end
 raider-results/
   run.json          # the run in schema v1
   attachments/      # copies of attached screenshots and videos
+  index.html        # the local report, see below
 ```
 
 Add `raider-results/` to your `.gitignore`. When a run is sharded, the files are named per shard; see [Parallel runs](#parallel-runs).
+
+## Local report
+
+Every run also writes `raider-results/index.html`: one self-contained page (inline CSS and JS, no network requests, so it works offline) built from every `run*.json` in the folder. It shows totals and pass rate, then failures first with message, exception class, backtrace and screenshots, followed by the other statuses; a filter box narrows by test name or file. Open it in a browser or publish it as a CI artifact.
+
+Rebuild it from the run files on disk, for example after `parallel_rspec` has written one file per shard:
+
+```
+raider-reporter report [dir]   # default: raider-results; prints the path, exits 1 when there are no run files
+```
+
+Set `config.html_report = false` to turn it off. An `index.html` that raider_reporter did not write is never overwritten or removed; a warning is printed instead.
 
 ## Uploading to Raider
 

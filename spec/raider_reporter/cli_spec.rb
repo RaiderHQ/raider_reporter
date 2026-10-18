@@ -41,7 +41,7 @@ RSpec.describe RaiderReporter::CLI do
     stub_request(:post, "#{gh}/statuses/#{sha}").to_return(status: 201, body: "{}")
   end
 
-  after { expect(out.string).to eq("") }
+  after { expect(out.string).to eq("") unless RSpec.current_example.metadata[:prints] }
 
   it "prints usage for an unknown subcommand and exits 0" do
     expect(described_class.new(["bogus"], env: env, out: out, err: err).run).to eq(0)
@@ -51,7 +51,7 @@ RSpec.describe RaiderReporter::CLI do
   it "prints usage for --help and for no arguments" do
     expect(described_class.new(["--help"], env: env, out: out, err: err).run).to eq(0)
     expect(described_class.new([], env: env, out: out, err: err).run).to eq(0)
-    expect(err.string.scan("Usage:").size).to eq(2)
+    expect(err.string.scan("Usage: raider-reporter comment").size).to eq(2)
   end
 
   it "skips with a notice when the event is not a pull request" do
@@ -349,6 +349,53 @@ RSpec.describe RaiderReporter::CLI do
       stdout, stderr, status = run_exe("comment")
       expect([stdout, status.exitstatus]).to eq(["", 0])
       expect(stderr).to include("[raider_reporter] skipped: unsupported CI")
+    end
+  end
+
+  describe "report", :prints do
+    it "rebuilds index.html and prints its path" do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "run.json"), JSON.generate("schema_version" => 1, "run" => {}, "results" => []))
+
+        code = described_class.new(["report", dir], env: {}, out: out, err: err).run
+
+        expect(code).to eq(0)
+        expect(out.string.strip).to eq(File.join(File.realpath(dir), "index.html")).or eq(File.join(dir, "index.html"))
+        expect(File).to exist(File.join(dir, "index.html"))
+      end
+    end
+
+    it "exits 1 when the folder has no run files" do
+      Dir.mktmpdir do |dir|
+        code = described_class.new(["report", dir], env: {}, out: out, err: err).run
+
+        expect(code).to eq(1)
+        expect(err.string).to include("no run*.json in")
+      end
+    end
+
+    it "exits 1 with a message when an index.html it did not write is in the way" do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "run.json"), JSON.generate("schema_version" => 1, "run" => {}, "results" => []))
+        File.write(File.join(dir, "index.html"), "mine")
+
+        code = described_class.new(["report", dir], env: {}, out: out, err: err).run
+
+        expect(code).to eq(1)
+        expect(err.string).to include("report failed", "not written by raider_reporter")
+      end
+    end
+
+    it "defaults to raider-results" do
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) do
+          FileUtils.mkdir_p("raider-results")
+          File.write("raider-results/run.json", JSON.generate("schema_version" => 1, "run" => {}, "results" => []))
+
+          expect(described_class.new(["report"], env: {}, out: out, err: err).run).to eq(0)
+          expect(File).to exist("raider-results/index.html")
+        end
+      end
     end
   end
 end

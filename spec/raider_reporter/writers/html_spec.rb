@@ -93,6 +93,15 @@ RSpec.describe RaiderReporter::Writers::Html do
     expect(html).not_to match(/<summary[^>]*>(Failed|Passed|Pending|Skipped)/)
   end
 
+  it "shows no Duration when the run finished before it started" do
+    write_run("run.json", [result("a", "passed")],
+              run: { "started_at" => "2026-10-18T10:05:00.000Z", "finished_at" => "2026-10-18T10:01:00.000Z" })
+
+    described_class.new.write(dir)
+
+    expect(html).not_to include("Duration")
+  end
+
   it "skips unreadable run files and names them in the footer" do
     write_run("run.json", [result("ok", "passed")])
     File.write(File.join(dir, "run-1.json"), "{ truncated")

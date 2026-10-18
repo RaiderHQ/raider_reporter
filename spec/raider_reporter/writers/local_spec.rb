@@ -72,4 +72,18 @@ RSpec.describe RaiderReporter::Writers::Local do
       expect(File.read(File.join(out, "attachments-1", "keep.png"))).to eq("k")
     end
   end
+
+  it "removes its own index.html when cleaning but never a user's" do
+    Dir.mktmpdir do |dir|
+      config = RaiderReporter::Configuration.new({})
+      config.output_dir = dir
+      File.write(File.join(dir, "index.html"), "<html>#{RaiderReporter::Writers::Html::MARKER}</html>")
+      described_class.new(config).write(RaiderReporter::Payload.new(run_with([])))
+      expect(File).not_to exist(File.join(dir, "index.html"))
+
+      File.write(File.join(dir, "index.html"), "<html>mine</html>")
+      described_class.new(config).write(RaiderReporter::Payload.new(run_with([])))
+      expect(File.read(File.join(dir, "index.html"))).to eq("<html>mine</html>")
+    end
+  end
 end

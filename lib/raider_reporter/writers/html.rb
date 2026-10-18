@@ -131,7 +131,7 @@ module RaiderReporter
       def run_duration(meta)
         starts = meta.filter_map { |m| time(m["started_at"]) }
         ends = meta.filter_map { |m| time(m["finished_at"]) }
-        return nil if starts.empty? || ends.empty?
+        return nil if starts.empty? || ends.empty? || ends.max < starts.min
 
         format_ms(((ends.max - starts.min) * 1000).round)
       end

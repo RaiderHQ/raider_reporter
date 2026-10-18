@@ -96,4 +96,35 @@ RSpec.describe "RaiderReporter.finish!" do
     json = JSON.parse(File.read(File.join(RaiderReporter.configuration.output_dir, "run.json")))
     expect(json["run"]["environment"].keys).to eq(%w[ruby os])
   end
+
+  context "HTML report" do
+    let(:results_dir) { RaiderReporter.configuration.output_dir }
+
+    before { RaiderReporter.configuration.token = nil }
+
+    it "writes index.html next to run.json" do
+      run_one_test
+      RaiderReporter.finish!(out)
+
+      expect(File.read(File.join(results_dir, "index.html"))).to include(RaiderReporter::Writers::Html::MARKER)
+    end
+
+    it "skips the report when html_report is false" do
+      RaiderReporter.configuration.html_report = false
+      run_one_test
+      RaiderReporter.finish!(out)
+
+      expect(File).to exist(File.join(results_dir, "run.json"))
+      expect(File).not_to exist(File.join(results_dir, "index.html"))
+    end
+
+    it "keeps run.json and warns when the report fails" do
+      allow_any_instance_of(RaiderReporter::Writers::Html).to receive(:write).and_raise(IOError, "disk full")
+      run_one_test
+
+      expect { RaiderReporter.finish!(out) }
+        .to output(/\[raider_reporter\] HTML report failed: IOError: disk full/).to_stderr
+      expect(File).to exist(File.join(results_dir, "run.json"))
+    end
+  end
 end

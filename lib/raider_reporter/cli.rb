@@ -3,8 +3,9 @@
 require "raider_reporter"
 
 module RaiderReporter
-  # `raider-reporter comment`: posts the build summary as a PR comment and sets a commit status.
-  # Fail-open: #run always returns 0, notices go to stderr, nothing goes to stdout.
+  # `raider-reporter comment` posts the build summary as a PR comment and sets a commit status
+  # (fail-open: always exits 0, notices go to stderr). `raider-reporter report [dir]` rebuilds the
+  # local HTML report (exits 1 when there is nothing to report).
   class CLI
     MARKER = "<!-- raider-reporter:build-comment -->"
     CONTEXT = "raider/tests"
@@ -23,6 +24,10 @@ module RaiderReporter
     }.freeze
     DEFAULT_API_URL = "https://api.github.com"
     USAGE = <<~TEXT
+      Usage: raider-reporter report [dir]
+
+      Rebuilds <dir>/index.html (default raider-results) from every run*.json in it. Prints its path.
+
       Usage: raider-reporter comment
 
       Posts (or updates) the Raider build summary on the current pull request and sets a status.
@@ -43,6 +48,8 @@ module RaiderReporter
     end
 
     def run
+      return report if @argv.first == "report" && !@argv.include?("--help") && !@argv.include?("-h")
+
       command = @argv.first
       if command == "comment" && !@argv.include?("--help") && !@argv.include?("-h")
         comment
@@ -56,6 +63,20 @@ module RaiderReporter
     end
 
     private
+
+    def report
+      dir = File.expand_path(@argv[1] || "raider-results")
+      path = Writers::Html.new.write(dir)
+      unless path
+        @err.puts("[raider_reporter] no run*.json in #{dir}")
+        return 1
+      end
+      @out.puts(path)
+      0
+    rescue StandardError => e
+      @err.puts("[raider_reporter] report failed: #{e.class}: #{e.message}")
+      1
+    end
 
     def comment
       if @env["GITHUB_ACTIONS"] == "true"
