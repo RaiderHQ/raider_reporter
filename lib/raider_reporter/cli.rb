@@ -5,7 +5,7 @@ require "raider_reporter"
 module RaiderReporter
   # `raider-reporter comment` posts the build summary as a PR comment and sets a commit status
   # (fail-open: always exits 0, notices go to stderr). `raider-reporter report [dir]` rebuilds the
-  # local HTML report (exits 1 when there is nothing to report).
+  # local HTML report (exits 1 when there are no run files or the report cannot be written).
   class CLI
     MARKER = "<!-- raider-reporter:build-comment -->"
     CONTEXT = "raider/tests"

@@ -34,7 +34,7 @@ RSpec.describe RaiderReporter::Writers::Html do
               run: { "git" => { "branch" => "main", "commit_sha" => "abcdef1234567" },
                      "ci" => { "provider" => "github_actions", "build_url" => "https://github.com/o/r/actions/runs/1" } })
 
-    path = described_class.new.write(dir)
+    path = Dir.chdir(File.dirname(dir)) { described_class.new.write(dir) }
 
     expect(path).to eq(File.join(dir, "index.html"))
     expect(html).to include(described_class::MARKER, "<title>myproj · Raider report</title>")
@@ -46,12 +46,60 @@ RSpec.describe RaiderReporter::Writers::Html do
   end
 
   it "merges every shard file into one report" do
-    write_run("run-0.json", [result("a", "passed")])
-    write_run("run-1.json", [result("b", "failed")])
+    write_run("run-0.json", [result("a", "passed")], run: { "shard" => { "index" => 0, "total" => 2 } })
+    write_run("run-1.json", [result("b", "failed")], run: { "shard" => { "index" => 1, "total" => 2 } })
 
     described_class.new.write(dir)
 
     expect(html).to include("spec/a_spec.rb", "spec/b_spec.rb", "1 passed", "1 failed")
+    expect(html).not_to include("Ignored older")
+  end
+
+  def shard(index, total) = { "shard" => { "index" => index, "total" => total } }
+  def at(time) = { "started_at" => time, "finished_at" => time }
+
+  it "ignores a stale run.json next to fresh shard files" do
+    write_run("run.json", [result("old", "failed")], run: at("2026-10-18T08:00:00.000Z"))
+    write_run("run-0.json", [result("a", "passed")], run: shard(0, 2).merge(at("2026-10-18T10:00:00.000Z")))
+    write_run("run-1.json", [result("b", "passed")], run: shard(1, 2).merge(at("2026-10-18T10:00:30.000Z")))
+
+    described_class.new.write(dir)
+
+    expect(html).to include("2 passed", "Ignored older run files: run.json")
+    expect(html).not_to include("spec/old_spec.rb")
+  end
+
+  it "ignores stale shard files next to a fresh run.json" do
+    4.times { |i| write_run("run-#{i}.json", [result("s#{i}", "failed")], run: shard(i, 4).merge(at("2026-10-18T08:00:00.000Z"))) }
+    write_run("run.json", [result("fresh", "passed")], run: at("2026-10-18T10:00:00.000Z"))
+
+    described_class.new.write(dir)
+
+    expect(html).to include("1 passed", "0 failed", "Ignored older run files: run-0.json, run-1.json, run-2.json, run-3.json")
+  end
+
+  it "ignores shards of a different total when the shard count changed" do
+    4.times { |i| write_run("run-#{i}.json", [result("n#{i}", "passed")], run: shard(i, 4).merge(at("2026-10-18T10:00:00.000Z"))) }
+    4.upto(7) { |i| write_run("run-#{i}.json", [result("o#{i}", "failed")], run: shard(i, 8).merge(at("2026-10-18T09:59:00.000Z"))) }
+
+    described_class.new.write(dir)
+
+    expect(html).to include("4 passed", "0 failed", "run-4.json, run-5.json, run-6.json, run-7.json")
+  end
+
+  it "counts passed-after-retry results as flaky" do
+    write_run("run.json", [result("a", "passed", "attempts" => 2), result("b", "passed"), result("c", "failed", "attempts" => 3)])
+
+    described_class.new.write(dir)
+
+    expect(html).to include('<span class="b flaky">1 flaky</span>')
+  end
+
+  it "formats durations at the minute boundary and for negative values" do
+    html_writer = described_class.new
+    expect(html_writer.send(:format_ms, 59_960)).to eq("1m 0s")
+    expect(html_writer.send(:format_ms, 59_900)).to eq("59.9s")
+    expect(html_writer.send(:format_ms, -5)).to eq("0ms")
   end
 
   it "escapes every run value" do
