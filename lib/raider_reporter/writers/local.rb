@@ -2,6 +2,7 @@
 
 require "fileutils"
 require "json"
+require_relative "html"
 
 module RaiderReporter
   module Writers
@@ -28,6 +29,8 @@ module RaiderReporter
       def clean(dir, payload)
         FileUtils.rm_f(File.join(dir, payload.run_file))
         FileUtils.rm_rf(File.join(dir, payload.attachments_dir))
+        index = File.join(dir, Html::FILE)
+        FileUtils.rm_f(index) if Html.ours?(index)
       end
     end
   end

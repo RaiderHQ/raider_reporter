@@ -11,6 +11,7 @@ require_relative "raider_reporter/configuration"
 require_relative "raider_reporter/content_types"
 require_relative "raider_reporter/collector"
 require_relative "raider_reporter/writers/local"
+require_relative "raider_reporter/writers/html"
 require_relative "raider_reporter/ci_detector"
 require_relative "raider_reporter/shard_detector"
 require_relative "raider_reporter/writers/uploader"
@@ -91,6 +92,7 @@ module RaiderReporter
       rescue StandardError => e
         warn("could not write #{configuration.output_dir}: #{e.class}: #{e.message}")
       end
+      write_html_report
       return nil unless configuration.upload?
 
       result = Writers::Uploader.new(configuration).upload(payload)
@@ -105,6 +107,14 @@ module RaiderReporter
     end
 
     private
+
+    def write_html_report
+      return unless configuration.html_report
+
+      Writers::Html.new.write(configuration.output_dir)
+    rescue StandardError => e
+      warn("HTML report failed: #{e.class}: #{e.message}")
+    end
 
     def success_line(result)
       link = result.build_url || result.url

@@ -21,4 +21,8 @@ RSpec.describe RaiderReporter::Configuration do
     expect(config.upload?).to be(false)
     expect(described_class.new("RAIDER_TOKEN" => "$(RAIDER_TOKEN)", "RAIDER_ENDPOINT" => "https://x").upload?).to be(false)
   end
+
+  it "writes the HTML report by default" do
+    expect(described_class.new({}).html_report).to be(true)
+  end
 end
