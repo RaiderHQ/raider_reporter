@@ -3,15 +3,19 @@
 require "securerandom"
 require "tmpdir"
 require "fileutils"
+require "set"
 
 module RaiderReporter
   # Accumulates one suite run. Framework formatters call it; writers read the Run it returns.
   class Collector
-    def initialize(max_attachment_bytes:, warn:, clock: -> { Time.now.utc }, uuid: -> { SecureRandom.uuid })
+    def initialize(max_attachment_bytes:, warn:, clock: -> { Time.now.utc }, uuid: -> { SecureRandom.uuid },
+                   quarantine: -> { Quarantine::EMPTY })
       @max_attachment_bytes = max_attachment_bytes
       @warn = warn
       @clock = clock
       @uuid = uuid
+      @quarantine = quarantine
+      @quarantined = nil
       @results = []
       @pending_attachments = nil
       @staged = 0
@@ -20,6 +24,14 @@ module RaiderReporter
     def start_run
       @started_at = @clock.call
       @results = []
+      @quarantined = load_quarantine
+    end
+
+    # True when the test's key is in the list loaded at run start.
+    def quarantined?(file_path, full_name)
+      return false if @quarantined.nil? || @quarantined.empty?
+
+      @quarantined.include?(RaiderReporter.test_key(file_path, full_name))
     end
 
     def start_test
@@ -80,6 +92,13 @@ module RaiderReporter
     end
 
     private
+
+    def load_quarantine
+      @quarantine.call
+    rescue StandardError => e
+      @warn.call(Quarantine.warning("#{e.class}: #{e.message}"))
+      Quarantine::EMPTY
+    end
 
     def keep?(attachment)
       path = attachment.source_path

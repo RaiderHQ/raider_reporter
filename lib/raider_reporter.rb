@@ -8,6 +8,7 @@ require_relative "raider_reporter/models"
 require_relative "raider_reporter/app_frame"
 require_relative "raider_reporter/payload"
 require_relative "raider_reporter/configuration"
+require_relative "raider_reporter/quarantine"
 require_relative "raider_reporter/content_types"
 require_relative "raider_reporter/collector"
 require_relative "raider_reporter/writers/local"
@@ -40,6 +41,7 @@ module RaiderReporter
       @configuration = nil
       @collector = nil
       @project_root = nil
+      @quarantined_keys = nil
     end
 
     def start_collector!
@@ -47,8 +49,14 @@ module RaiderReporter
       @project_root = Dir.pwd
       @collector = Collector.new(
         max_attachment_bytes: configuration.max_attachment_bytes,
-        warn: ->(message) { warn(message) }
+        warn: ->(message) { warn(message) },
+        quarantine: -> { quarantined_keys }
       )
+    end
+
+    # Fetched once per process, at the first run start (spec §4.2).
+    def quarantined_keys
+      @quarantined_keys ||= Quarantine.load(configuration, warn: ->(message) { warn(message) })
     end
 
     def attach(name, path, type: nil)
