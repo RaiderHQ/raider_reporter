@@ -124,6 +124,7 @@ module RaiderReporter
         # Always buffer: a lookup problem may lose detail, never the scenario.
         failure = status == "failed" ? safely(nil) { failure_for(problem, result, test_case) } : nil
         fields = identity_for(test_case)
+        status = "quarantined" if status == "failed" && quarantined?(fields)
         key = "#{test_case.location}|#{test_case.name}"
         @attempts[key] += 1
         # The newest attempt replaces the older one, taking its attachments with it.
@@ -150,6 +151,11 @@ module RaiderReporter
           identifier: "#{file_path}:#{line_number}",
           tags: test_case.tags.map { |tag| tag.name.to_s.delete_prefix("@") }.uniq.sort
         }
+      end
+
+      # A lookup problem must never turn a real failure into a quarantined one.
+      def quarantined?(fields)
+        safely(false) { @collector.quarantined?(fields[:file_path], fields[:full_name]) }
       end
 
       def full_name(test_case)

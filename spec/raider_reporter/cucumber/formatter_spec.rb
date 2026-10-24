@@ -4,6 +4,7 @@ require "open3"
 require "tmpdir"
 require "rbconfig"
 require "raider_reporter/cucumber/formatter"
+require_relative "../../support/fake_raider"
 
 RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   let(:lib_dir) { File.expand_path("../../../lib", __dir__) }
@@ -12,8 +13,8 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   # Runs cucumber from the fixture project; returns [stdout, stderr, status, results by full_name].
   def run_cucumber(*targets, extra_args: [], format_args: nil, mode: "formatter", extra_env: {}, out_dir: nil)
     with_out_dir(out_dir) do |out|
-      env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "GITHUB_ACTIONS" => nil,
-              "GITHUB_JOB" => nil, "FIXTURE_OUT" => out, "FIXTURE_MODE" => mode }.merge(extra_env)
+      env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "RAIDER_QUARANTINE" => nil, "RAIDER_EXEC_SUMMARY" => nil,
+              "GITHUB_ACTIONS" => nil, "GITHUB_JOB" => nil, "FIXTURE_OUT" => out, "FIXTURE_MODE" => mode }.merge(extra_env)
       # Cucumber allows only one formatter per stream, so ours must be given --out.
       format_args ||= if mode == "plugin"
                         ["--format", "progress"]
@@ -535,6 +536,41 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
         expect(File).to exist(File.join(dir, "run.json"))
       ensure
         RaiderReporter.reset!
+      end
+    end
+  end
+
+  describe "quarantine" do
+    let(:key) { RaiderReporter.test_key("features/quarantine.feature", "Quarantine: A known flaky failure") }
+
+    it "reports a quarantined scenario as quarantined with its step-first failure, and writes schema 2" do
+      FakeRaider.with_quarantine([key]) do |env, server|
+        _stdout, stderr, status, results = run_cucumber("features/quarantine.feature", extra_env: env)
+
+        expect(status.exitstatus).to eq(1), stderr
+        expect(@last[:json]["schema_version"]).to eq(2)
+        expect(results.fetch("Quarantine: A stable check")["status"]).to eq("passed")
+        flaky = results.fetch("Quarantine: A known flaky failure")
+        expect(flaky["status"]).to eq("quarantined")
+        expect(flaky["failure"]["message"]).to start_with("When I fail on purpose (features/quarantine.feature:")
+        expect(flaky["failure"]["exception_class"]).to eq("ArgumentError")
+        expect(server.requests.count { |r| r[:method] == "GET" }).to eq(1)
+      end
+    end
+
+    it "quarantines in plugin mode too and leaves other statuses alone" do
+      FakeRaider.with_quarantine([key]) do |env, _server|
+        _stdout, _stderr, _status, results = run_cucumber("features/quarantine.feature", mode: "plugin", extra_env: env)
+        expect(results.transform_values { |r| r["status"] })
+          .to eq("Quarantine: A stable check" => "passed", "Quarantine: A known flaky failure" => "quarantined")
+      end
+    end
+
+    it "keeps the failure failed when the scenario is not on the list" do
+      FakeRaider.with_quarantine(["0" * 64]) do |env, _server|
+        _stdout, _stderr, _status, results = run_cucumber("features/quarantine.feature", extra_env: env)
+        expect(results.fetch("Quarantine: A known flaky failure")["status"]).to eq("failed")
+        expect(@last[:json]["schema_version"]).to eq(1)
       end
     end
   end

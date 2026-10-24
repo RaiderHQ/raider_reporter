@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RaiderReporter
-  # Serializes a Run into schema v1. Local mode points attachments at copied
+  # Serializes a Run: schema 1, or schema 2 when a result is quarantined. Local mode points attachments at copied
   # files; upload mode points them at multipart part names.
   class Payload
     MODES = %i[local upload].freeze
@@ -17,7 +17,7 @@ module RaiderReporter
 
       entries = attachment_entries.each
       {
-        "schema_version" => SCHEMA_VERSION,
+        "schema_version" => schema_version,
         "client_run_id" => @run.client_run_id,
         "run" => run_hash,
         "results" => @run.results.map do |result|
@@ -33,6 +33,10 @@ module RaiderReporter
     def attachments_dir = shard_index ? "attachments-#{shard_index}" : "attachments"
 
     def run_file = shard_index ? "run-#{shard_index}.json" : "run.json"
+
+    # Version 2 only adds the quarantined status; older servers keep accepting
+    # every run that has none (spec §4.3).
+    def schema_version = @run.results.any? { |result| result.status == "quarantined" } ? SCHEMA_VERSION : 1
 
     def attachment_entries
       @attachment_entries ||= @run.results.flat_map(&:attachments).each_with_index.map do |attachment, index|

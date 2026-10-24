@@ -54,16 +54,21 @@ module RaiderReporter
       def record(example, status)
         metadata = example.metadata
         execution = example.execution_result
+        file_path = metadata[:file_path].to_s.delete_prefix("./")
+        full_name = utf8(example.full_description)
+        failure = status == "failed" ? failure_for(execution.exception) : nil
+        # The key is computed from the payload's own file_path and full_name (spec §4.2).
+        status = "quarantined" if status == "failed" && @collector.quarantined?(file_path, full_name)
         @collector.finish_test(
           identifier: example.id,
-          full_name: utf8(example.full_description),
-          file_path: metadata[:file_path].to_s.delete_prefix("./"),
+          full_name: full_name,
+          file_path: file_path,
           line_number: metadata[:line_number],
           status: status,
           duration_ms: ((execution.run_time || 0) * 1000).round,
           attempts: metadata.fetch(:retry_attempts, 0).to_i + 1,
           tags: metadata.select { |key, value| value == true && !NON_TAG_KEYS.include?(key) }.keys.map(&:to_s).sort,
-          failure: status == "failed" ? failure_for(execution.exception) : nil
+          failure: failure
         )
       end
 
