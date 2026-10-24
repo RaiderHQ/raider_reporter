@@ -16,7 +16,7 @@ module RaiderReporter
       MARKER = '<meta name="generator" content="raider_reporter">'
       ROW_LIMIT = 2_000
       RUN_FILE = /\Arun(-[^\/]+)?\.json\z/
-      SECTIONS = [%w[failed Failed], %w[passed Passed], %w[pending Pending], %w[skipped Skipped]].freeze
+      SECTIONS = [%w[failed Failed], %w[quarantined Quarantined], %w[passed Passed], %w[pending Pending], %w[skipped Skipped]].freeze
       PROVIDERS = { "github_actions" => "GitHub Actions", "azure_pipelines" => "Azure Pipelines" }.freeze
 
       def self.ours?(path)
@@ -140,7 +140,11 @@ module RaiderReporter
         flaky = counts["flaky"]
         decided = passed + counts["failed"]
         rate = decided.zero? ? "—" : "#{(passed * 100.0 / decided).round}%"
-        parts = SECTIONS.map { |status, _| %(<span class="b #{status}">#{counts[status]} #{status}</span>) }
+        parts = SECTIONS.filter_map do |status, _|
+          next if status == "quarantined" && counts[status].zero?
+
+          %(<span class="b #{status}">#{counts[status]} #{status}</span>)
+        end
         parts << %(<span class="b flaky">#{flaky} flaky</span>) if flaky.positive?
         "#{parts.join(' ')} <span class=\"rate\">Pass rate #{rate}</span>"
       end
@@ -257,8 +261,8 @@ module RaiderReporter
       def h(value) = ERB::Util.html_escape(value.to_s)
 
       CSS = <<~CSS.gsub(/\s*\n\s*/, "")
-        :root{--bg:#fff;--fg:#1f2328;--mute:#656d76;--bdr:#d0d7de;--card:#f6f8fa;--ruby:#C14420;--ok:#1a7f37;--warn:#9a6700}
-        @media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--mute:#8d96a0;--bdr:#30363d;--card:#161b22;--ok:#3fb950;--warn:#d29922}}
+        :root{--bg:#fff;--fg:#1f2328;--mute:#656d76;--bdr:#d0d7de;--card:#f6f8fa;--ruby:#C14420;--ok:#1a7f37;--warn:#9a6700;--q:#6B4FA0}
+        @media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--mute:#8d96a0;--bdr:#30363d;--card:#161b22;--ok:#3fb950;--warn:#d29922;--q:#a78bfa}}
         *{box-sizing:border-box}
         body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
         header,main,footer{max-width:1100px;margin:0 auto}
@@ -266,6 +270,7 @@ module RaiderReporter
         .meta,.l,footer,.more{color:var(--mute);font-size:12px}
         .b{display:inline-block;padding:0 6px;border-radius:9px;font-size:11px;font-weight:600;border:1px solid var(--bdr)}
         .b.failed{background:var(--ruby);color:#fff;border-color:var(--ruby)}
+        .b.quarantined{color:var(--q);border-color:var(--q)}
         .b.passed{color:var(--ok)}.b.pending,.b.skipped,.b.flaky{color:var(--warn)}
         .rate{font-weight:600;margin-left:6px}
         #q{width:100%;margin:12px 0;padding:8px;border:1px solid var(--bdr);border-radius:6px;background:var(--card);color:var(--fg)}

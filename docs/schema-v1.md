@@ -60,7 +60,7 @@ Rules:
 - `run.ci.provider` is `github_actions` or `azure_pipelines`. On `azure_pipelines`: `build_url` is the build results page, `build_id` is `Build.BuildId`, `attempt` is `System.StageAttempt` (default `"1"`), `job` is the job display name, `repository` is `"<project>/<repository>"`, and `build_key` is
   `azure_pipelines:<collection host and path>/<project id>/<repository id>:<build id>:<attempt>`. The key uses ids, not names, so renames and names with spaces do not change it.
   `run.shard` comes from `strategy: parallel` (`System.JobPositionInPhase` / `System.TotalJobsInPhase`) when more than one job runs.
-- `failure` is present only when `status == "failed"`.
+- `failure` is present only when `status` is `failed` (or `quarantined`, schema 2).
 - `failure.app_frame` (optional string, at most 500 characters, added in reporter 0.6.0) is the first line of the raw exception backtrace inside the project root (the working directory when the run starts), skipping `vendor/`, `.bundle/`, installed gems, Ruby's standard library and `<internal:...>` lines. The path is relative to the project root and the rest of the line (line number, `in '...'`) is unchanged. It is taken from the full backtrace, so it can differ from the first line of the (filtered, 50-line) `backtrace`. The key is omitted when no line qualifies (for Cucumber the backtrace may already have been filtered by other formatters, in which case the field may be omitted) or the reporter could not compute it; consumers must then fall back to `backtrace`. Older servers ignore it.
 - `attempts` defaults to 1; read from `rspec-retry` metadata when present (RSpec) or counted from Cucumber's `--retry` attempts.
 - Test identity: `test_key = SHA256("#{file_path}\0#{full_name}")`, computed by
@@ -113,3 +113,7 @@ Cucumber results use the same fields; there is no schema change.
 | `failure.backtrace` | at most 50 lines |
 | `attempts` | number of attempts under `--retry`; only the final attempt is reported |
 | `attachments` | files attached with `RaiderReporter.attach` or Cucumber's `attach(path, media_type)` during the final attempt |
+
+## Schema version 2
+
+Identical to version 1 except that `status` may also be `quarantined`: the test failed but is quarantined in Raider. A quarantined result carries `failure` and attachments like a failed one. raider_reporter 0.8.0+ writes `"schema_version": 2` only for runs that contain a quarantined result; every other run stays version 1. Raider accepts both versions; in version 1 `quarantined` is rejected like any unknown status.

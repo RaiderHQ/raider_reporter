@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 — 2026-10-24
+
+- Quarantine: with `RAIDER_QUARANTINE=1` (or `config.quarantine = true`) and a token and endpoint, the formatters fetch the project's quarantine list once per run (`GET /api/v1/quarantine`, 3-second timeout) and report matching failures as `quarantined`, keeping their message, backtrace and attachments. Fail-open: any fetch problem prints `[raider_reporter] quarantine list unavailable (<reason>); no tests quarantined` and nothing is quarantined
+- `raider-reporter exec -- <command…>` runs the suite (no shell) and exits 0 when the command exited 1 and every failure the framework counted was quarantined, with no errors outside tests; it prints `raider-reporter: N quarantined failure(s) did not fail the build`. Otherwise it exits with the command's code (128 + signal when killed, 127 when the command cannot start, 2 without a command)
+- Runs with a quarantined result are written as schema 2; every other run stays schema 1, so older Raider servers keep accepting them
+- The HTML report shows quarantined results in their own section and color; `raider-reporter comment` reads `N quarantined` from the headline
+- RSpec and Cucumber exit codes are unchanged without `exec`
+
 ## 0.7.0 — 2026-10-18
 
 - Add a local HTML report: every run now also writes `raider-results/index.html`, one self-contained page (inline CSS and JS, no network requests) built from every `run*.json` in the folder, so shards from one machine share a report. Failures come first with their message, exception class, backtrace and screenshots; a filter box narrows by test name or file. Open it in a browser after a run, or publish it as a CI artifact

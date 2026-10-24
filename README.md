@@ -66,7 +66,7 @@ cucumber --format pretty --format RaiderReporter::Cucumber::Formatter --out raid
 - `identifier` is `"<file_path>:<line>"`: the scenario line, or the Examples row line for outline rows.
 - `tags` are the feature, scenario and Examples tags, merged, sorted, unique, without `@`.
 
-Statuses: passed, failed and ambiguous (reported as failed), pending and undefined (reported as pending), skipped.
+Statuses: passed, failed and ambiguous (reported as failed), pending and undefined (reported as pending), skipped. Failed (and ambiguous) scenarios on the quarantine list are reported as quarantined.
 
 ### Failures
 
@@ -138,6 +138,7 @@ end
 | `output_dir` | `"raider-results"` | Directory for local output. |
 | `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory (`run-<n>.json` and `attachments-<n>/` when sharded) inside `output_dir` before writing. Nothing else in `output_dir` is touched, except a raider_reporter-written `index.html`. |
 | `html_report` | `true` | Write `index.html`, the local HTML report, into `output_dir` after each run. See [Local report](#local-report). |
+| `quarantine` | `true` when `ENV["RAIDER_QUARANTINE"]` is `1` or `true` | Fetch the quarantine list at run start and report matching failures as `quarantined`. Needs `token` and `endpoint`. See [Quarantine](#quarantine). |
 | `environment` | `{}` | Free-form key/values stored with the run (browser, suite name, and so on). Values are JSON values: strings, booleans or numbers. |
 
 ## Local output
@@ -178,6 +179,24 @@ An upload carries at most 45 MB of attachments and at most 1000 attachment files
 Reporting is fail-open: no error inside the gem, network failure, timeout or non-2xx response will raise or change RSpec's exit status. Each connect/write/read step of the upload times out after 30 seconds. Problems are printed as warnings prefixed with `[raider_reporter]`. An endpoint without `http://` or `https://` (for example `localhost:3000`) produces a warning and nothing is uploaded; a trailing slash is fine.
 
 The hosted Raider service is not public yet; uploads go to a Raider server whose address you provide in `RAIDER_ENDPOINT`.
+
+## Quarantine
+
+A test quarantined in Raider (with a reason and an expiry) still runs and is still reported, but its failure is reported as `quarantined`, and a CI build stays green when quarantined tests are its only failures.
+
+1. Turn it on in CI with `RAIDER_QUARANTINE=1` (or `config.quarantine = true`), next to `RAIDER_TOKEN` and `RAIDER_ENDPOINT`.
+2. Run the suite through `raider-reporter exec`:
+
+   ```
+   bundle exec raider-reporter exec -- bundle exec rspec
+   bundle exec raider-reporter exec -- bundle exec cucumber
+   ```
+
+When the run starts, the formatter fetches the project's quarantine list once (`GET /api/v1/quarantine`, 3-second timeout). On any error it prints `[raider_reporter] quarantine list unavailable (<reason>); no tests quarantined` and nothing is quarantined. Matching failures keep their message, backtrace and screenshots; the run is written as schema 2, and `run.json`, the upload and the HTML report show `quarantined`.
+
+`exec` runs the command without a shell and exits with its status, with one exception: when the command exits 1, every failure the framework counted is quarantined, and nothing went wrong outside tests, it prints `raider-reporter: N quarantined failure(s) did not fail the build` to stderr and exits 0. "Outside tests" means RSpec errors outside examples, a run stopped early (`--fail-fast`, an interrupt, a load error), or a Cucumber run that did not finish every scenario. RSpec `--fail-fast` counts even when the last example triggers it, and interrupts count too, so the build stays red. Under Cucumber `--strict`, a flaky scenario (failed, then passed on retry) counts as a real failure and keeps the build red. A command killed by a signal exits 128 + the signal number; a command that cannot be started exits 127. Several processes under one `exec` (for example `parallel_rspec`) never turn red into green: their summaries conflict and the command's exit code is used.
+
+Without `exec`, RSpec and Cucumber exit codes are unchanged; quarantine only changes how failures are reported.
 
 ## Pull request comments
 
@@ -319,7 +338,7 @@ Tip: run `rm -rf raider-results` before a parallel run. Each process only cleans
 
 ## Schema
 
-`run.json` follows schema v1, documented in [docs/schema-v1.md](docs/schema-v1.md). Statuses are exactly `passed`, `failed`, `pending` and `skipped`. In both RSpec and Cucumber, a failure may carry `app_frame` (when a project frame is found): the first backtrace line inside your project, for example `spec/pages/login_page.rb:42:in 'LoginPage#submit'`, which Raider uses to group failures with the same error.
+`run.json` follows schema v1, documented in [docs/schema-v1.md](docs/schema-v1.md). Statuses are `passed`, `failed`, `pending` and `skipped`, plus `quarantined` in schema 2 (written only when a run has a quarantined result). In both RSpec and Cucumber, a failure may carry `app_frame` (when a project frame is found): the first backtrace line inside your project, for example `spec/pages/login_page.rb:42:in 'LoginPage#submit'`, which Raider uses to group failures with the same error.
 
 ## Contributing
 
