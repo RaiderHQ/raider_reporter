@@ -3,15 +3,19 @@
 require "securerandom"
 require "tmpdir"
 require "fileutils"
+require "set"
 
 module RaiderReporter
   # Accumulates one suite run. Framework formatters call it; writers read the Run it returns.
   class Collector
-    def initialize(max_attachment_bytes:, warn:, clock: -> { Time.now.utc }, uuid: -> { SecureRandom.uuid })
+    def initialize(max_attachment_bytes:, warn:, clock: -> { Time.now.utc }, uuid: -> { SecureRandom.uuid },
+                   quarantine: -> { Quarantine::EMPTY })
       @max_attachment_bytes = max_attachment_bytes
       @warn = warn
       @clock = clock
       @uuid = uuid
+      @quarantine = quarantine
+      @quarantined = nil
       @results = []
       @pending_attachments = nil
       @staged = 0
@@ -20,6 +24,26 @@ module RaiderReporter
     def start_run
       @started_at = @clock.call
       @results = []
+      @quarantined = load_quarantine
+    end
+
+    # True when the test's key is in the list loaded at run start.
+    def quarantined?(file_path, full_name)
+      return false if @quarantined.nil? || @quarantined.empty?
+
+      @quarantined.include?(RaiderReporter.test_key(file_path, full_name))
+    end
+
+    attr_reader :framework_counts
+
+    # What the framework itself counted (spec §4.4); nil until it reports, and
+    # then no exec summary is written.
+    def record_framework_counts(failures:, errors_outside_tests:)
+      @framework_counts = { failures: Integer(failures), errors_outside_tests: Integer(errors_outside_tests) }
+    end
+
+    def quarantined_count
+      @results.count { |result| result.status == "quarantined" }
     end
 
     def start_test
@@ -80,6 +104,13 @@ module RaiderReporter
     end
 
     private
+
+    def load_quarantine
+      @quarantine.call
+    rescue StandardError => e
+      @warn.call(Quarantine.warning("#{e.class}: #{e.message}"))
+      Quarantine::EMPTY
+    end
 
     def keep?(attachment)
       path = attachment.source_path

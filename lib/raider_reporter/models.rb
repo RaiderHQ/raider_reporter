@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 module RaiderReporter
-  SCHEMA_VERSION = 1
-  STATUSES = %w[passed failed pending skipped].freeze
+  SCHEMA_VERSION = 2
+  STATUSES = %w[passed failed pending skipped quarantined].freeze
 
   Failure = Data.define(:message, :exception_class, :backtrace, :app_frame) do
     def initialize(message:, exception_class:, backtrace:, app_frame: nil)

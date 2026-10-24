@@ -197,4 +197,23 @@ RSpec.describe RaiderReporter::Writers::Html do
 
     expect(html).not_to include("Skipped unreadable")
   end
+
+  it "shows quarantined results in their own section with their own label, color and count" do
+    failure = { "message" => "Net::ReadTimeout", "exception_class" => "Net::ReadTimeout", "backtrace" => ["spec/q_spec.rb:3"] }
+    write_run("run.json", [result("flaky", "quarantined", "failure" => failure), result("ok", "passed"), result("bad", "failed")])
+
+    described_class.new.write(dir)
+
+    expect(html).to include('<span class="b quarantined">1 quarantined</span>', "<summary>Quarantined (1)</summary>",
+                            ".b.quarantined{", "Net::ReadTimeout", "Pass rate 50%")
+    expect(html.index("<summary>Failed (1)</summary>")).to be < html.index("<summary>Quarantined (1)</summary>")
+  end
+
+  it "omits the quarantined badge from the totals when nothing is quarantined" do
+    write_run("run.json", [result("ok", "passed")])
+
+    described_class.new.write(dir)
+
+    expect(html).not_to include('<span class="b quarantined">')
+  end
 end

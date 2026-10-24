@@ -138,4 +138,60 @@ RSpec.describe "RaiderReporter.finish!" do
       expect(out.string).to include("Raider report: https://raider.test/runs/9")
     end
   end
+
+  context "exec summary" do
+    let(:summary_path) { File.join(File.dirname(RaiderReporter.configuration.output_dir), "summary.json") }
+
+    before do
+      RaiderReporter.configuration.token = nil
+      RaiderReporter.configuration.exec_summary_path = summary_path
+    end
+
+    def summary = JSON.parse(File.read(summary_path))
+
+    it "writes the framework counts and the number of quarantined results" do
+      collector = RaiderReporter.start_collector!
+      collector.start_run
+      collector.start_test
+      collector.finish_test(identifier: "i", full_name: "n", file_path: "f", line_number: 1, status: "quarantined",
+                            duration_ms: 1, attempts: 1, tags: [], failure: nil)
+      collector.record_framework_counts(failures: 1, errors_outside_tests: 0)
+
+      RaiderReporter.finish!(out)
+
+      expect(summary).to eq("framework_failures" => 1, "quarantined" => 1, "errors_outside_tests" => 0, "pid" => Process.pid)
+    end
+
+    it "writes nothing when the framework never reported its counts" do
+      run_one_test
+      RaiderReporter.finish!(out)
+      expect(File).not_to exist(summary_path)
+    end
+
+    it "writes nothing without RAIDER_EXEC_SUMMARY" do
+      RaiderReporter.configuration.exec_summary_path = nil
+      run_one_test
+      RaiderReporter.collector.record_framework_counts(failures: 0, errors_outside_tests: 0)
+      RaiderReporter.finish!(out)
+      expect(File).not_to exist(summary_path)
+    end
+
+    it "still writes the summary when raider-results cannot be written" do
+      File.write(RaiderReporter.configuration.output_dir, "a file, not a directory")
+      run_one_test
+      RaiderReporter.collector.record_framework_counts(failures: 0, errors_outside_tests: 0)
+
+      expect { RaiderReporter.finish!(out) }.to output(/could not write/).to_stderr
+      expect(summary["framework_failures"]).to eq(0)
+    end
+
+    it "warns and carries on when the summary cannot be written" do
+      RaiderReporter.configuration.exec_summary_path = File.join(summary_path, "missing", "summary.json")
+      run_one_test
+      RaiderReporter.collector.record_framework_counts(failures: 0, errors_outside_tests: 0)
+
+      expect { RaiderReporter.finish!(out) }.to output(/could not write the exec summary: Errno::ENOENT/).to_stderr
+      expect(File).to exist(File.join(RaiderReporter.configuration.output_dir, "run.json"))
+    end
+  end
 end

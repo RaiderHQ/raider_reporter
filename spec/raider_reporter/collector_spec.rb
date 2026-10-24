@@ -55,4 +55,32 @@ RSpec.describe RaiderReporter::Collector do
       expect(warnings.join("\n")).to include("big.png").and include("gone.png")
     end
   end
+
+  it "loads the quarantine list at run start and matches results by test key" do
+    loads = 0
+    key = RaiderReporter.test_key("spec/a_spec.rb", "n")
+    quarantining = described_class.new(max_attachment_bytes: 10, warn: ->(m) { warnings << m },
+                                       quarantine: lambda {
+                                         loads += 1
+                                         Set[key].freeze
+                                       })
+
+    expect(quarantining.quarantined?("spec/a_spec.rb", "n")).to be(false)
+    quarantining.start_run
+    expect(loads).to eq(1)
+    expect(quarantining.quarantined?("spec/a_spec.rb", "n")).to be(true)
+    expect(quarantining.quarantined?("spec/a_spec.rb", "other")).to be(false)
+  end
+
+  it "quarantines nothing and warns when the loader raises" do
+    broken = described_class.new(max_attachment_bytes: 10, warn: ->(m) { warnings << m }, quarantine: -> { raise "boom" })
+    broken.start_run
+    expect(broken.quarantined?("spec/a_spec.rb", "n")).to be(false)
+    expect(warnings).to eq(["quarantine list unavailable (RuntimeError: boom); no tests quarantined"])
+  end
+
+  it "quarantines nothing by default" do
+    collector.start_run
+    expect(collector.quarantined?("spec/a_spec.rb", "n")).to be(false)
+  end
 end

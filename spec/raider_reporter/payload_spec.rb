@@ -85,4 +85,21 @@ RSpec.describe RaiderReporter::Payload do
   it "rejects unknown modes" do
     expect { payload.to_h(mode: :nope) }.to raise_error(ArgumentError)
   end
+
+  it "lists quarantined as a status and writes the highest schema version" do
+    expect(RaiderReporter::STATUSES).to eq(%w[passed failed pending skipped quarantined])
+    expect(RaiderReporter::SCHEMA_VERSION).to eq(2)
+  end
+
+  it "writes schema 2 only when a result is quarantined, keeping its failure" do
+    expect(payload.to_h(mode: :upload)["schema_version"]).to eq(1)
+
+    quarantined = failed.with(status: "quarantined")
+    h = described_class.new(run.with(results: [passed, quarantined])).to_h(mode: :upload)
+
+    expect(h["schema_version"]).to eq(2)
+    expect(h["results"][1]["status"]).to eq("quarantined")
+    expect(h["results"][1]["failure"]).to eq("message" => "boom", "exception_class" => "RuntimeError", "backtrace" => ["a.rb:1"])
+    expect(h["results"][1]["attachments"].map { |a| a["part"] }).to eq(%w[att_0 att_1])
+  end
 end

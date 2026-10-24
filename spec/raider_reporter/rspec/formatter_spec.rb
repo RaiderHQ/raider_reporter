@@ -3,6 +3,7 @@
 require "open3"
 require "rbconfig"
 require "raider_reporter/rspec/formatter"
+require_relative "../../support/fake_raider"
 
 RSpec.describe "RaiderReporter::RSpec::Formatter" do
   let(:lib_dir) { File.expand_path("../../../lib", __dir__) }
@@ -10,7 +11,8 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
 
   def run_suite(dir, extra_env = {}, extra_args = [])
     FileUtils.cp(fixture, File.join(dir, "sample_spec.rb"))
-    env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "GITHUB_ACTIONS" => nil, "GITHUB_JOB" => nil }.merge(extra_env)
+    env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "RAIDER_QUARANTINE" => nil, "RAIDER_EXEC_SUMMARY" => nil,
+            "GITHUB_ACTIONS" => nil, "GITHUB_JOB" => nil }.merge(extra_env)
     Open3.capture2e(
       env, RbConfig.ruby, "-I", lib_dir, Gem.bin_path("rspec-core", "rspec"),
       "--require", "raider_reporter/rspec", "--format", "progress",
@@ -128,6 +130,116 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
       expect(status.exitstatus).to eq(0), output
       expect(File).not_to exist(File.join(dir, "raider-results", "run.json"))
       expect(output).not_to include("[raider_reporter]")
+    end
+  end
+
+  describe "quarantine" do
+    def run_json(dir) = JSON.parse(File.read(File.join(dir, "raider-results", "run.json")))
+
+    it "reports a quarantined failure as quarantined, keyed on the ./-stripped path, with schema 2" do
+      # RSpec's metadata says ./sample_spec.rb; the payload and the server key say sample_spec.rb.
+      key = RaiderReporter.test_key("sample_spec.rb", "Sample fails with a screenshot")
+      Dir.mktmpdir do |dir|
+        FakeRaider.with_quarantine([key]) do |env, server|
+          output, status = run_suite(dir, env)
+
+          expect(status.exitstatus).to eq(1), output
+          json = run_json(dir)
+          results = json["results"].sort_by { |r| r["line_number"] }
+          expect(json["schema_version"]).to eq(2)
+          expect(results.map { |r| r["status"] }).to eq(%w[passed quarantined passed pending skipped failed])
+          expect(results[1]["identifier"]).to eq("./sample_spec.rb[1:2]")
+          expect(results[1]["failure"]["message"]).to include("expected: 2")
+          expect(results[1]["failure"]["app_frame"]).to match(/\Asample_spec\.rb:\d+:in /)
+          expect(results[1]["attachments"].map { |a| a["name"] }).to eq(["screenshot"])
+          gets = server.requests.select { |r| r[:method] == "GET" }
+          expect(gets.map { |r| r[:path] }).to eq(["/api/v1/quarantine"])
+          expect(gets.first[:headers]).to include("authorization" => "Bearer tok", "accept" => "application/json")
+        end
+      end
+    end
+
+    it "keeps failures failed and warns once when the list cannot be fetched" do
+      Dir.mktmpdir do |dir|
+        env = { "RAIDER_TOKEN" => "tok", "RAIDER_ENDPOINT" => "http://127.0.0.1:9", "RAIDER_QUARANTINE" => "1" }
+        output, status = run_suite(dir, env)
+
+        expect(status.exitstatus).to eq(1)
+        expect(output.scan("quarantine list unavailable (").size).to eq(1), output
+        json = run_json(dir)
+        expect(json["schema_version"]).to eq(1)
+        expect(json["results"].count { |r| r["status"] == "failed" }).to eq(2)
+      end
+    end
+
+    it "makes no quarantine request when RAIDER_QUARANTINE is not set" do
+      Dir.mktmpdir do |dir|
+        FakeRaider.with_quarantine(["x"]) do |env, server|
+          run_suite(dir, env.except("RAIDER_QUARANTINE"))
+          expect(server.requests.map { |r| r[:method] }).to eq(["POST"])
+        end
+      end
+    end
+  end
+
+  def run_source(dir, source, extra_env = {}, extra_args = [])
+    File.write(File.join(dir, "inline_spec.rb"), source)
+    env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "RAIDER_QUARANTINE" => nil, "RAIDER_EXEC_SUMMARY" => nil,
+            "GITHUB_ACTIONS" => nil, "GITHUB_JOB" => nil }.merge(extra_env)
+    Open3.capture2e(
+      env, RbConfig.ruby, "-I", lib_dir, Gem.bin_path("rspec-core", "rspec"),
+      "--require", "raider_reporter/rspec", "--format", "progress",
+      "--format", "RaiderReporter::RSpec::Formatter", *extra_args, "inline_spec.rb",
+      chdir: dir
+    )
+  end
+
+  describe "exec summary" do
+    def summary_env(dir) = { "RAIDER_EXEC_SUMMARY" => File.join(dir, "summary.json") }
+
+    def summary(dir) = JSON.parse(File.read(File.join(dir, "summary.json"))).except("pid")
+
+    it "writes RSpec's failure count with no errors outside examples" do
+      Dir.mktmpdir do |dir|
+        output, = run_suite(dir, summary_env(dir))
+        expect(summary(dir)).to eq({ "framework_failures" => 2, "quarantined" => 0, "errors_outside_tests" => 0 }), output
+      end
+    end
+
+    it "counts the quarantined failures it reported" do
+      key = RaiderReporter.test_key("sample_spec.rb", "Sample fails with a screenshot")
+      Dir.mktmpdir do |dir|
+        FakeRaider.with_quarantine([key]) do |env, _server|
+          run_suite(dir, env.merge(summary_env(dir)))
+          expect(summary(dir)).to eq("framework_failures" => 2, "quarantined" => 1, "errors_outside_tests" => 0)
+        end
+      end
+    end
+
+    it "counts an after(:context) error as an error outside examples" do
+      Dir.mktmpdir do |dir|
+        output, = run_source(dir, <<~RUBY, summary_env(dir))
+          RSpec.describe "Q" do
+            after(:context) { raise "teardown exploded" }
+            it("fails") { expect(1).to eq(2) }
+          end
+        RUBY
+        expect(summary(dir)).to eq({ "framework_failures" => 1, "quarantined" => 0, "errors_outside_tests" => 1 }), output
+      end
+    end
+
+    it "counts a --fail-fast stop as an error outside examples" do
+      Dir.mktmpdir do |dir|
+        output, = run_suite(dir, summary_env(dir), ["--fail-fast"])
+        expect(summary(dir)).to eq({ "framework_failures" => 1, "quarantined" => 0, "errors_outside_tests" => 1 }), output
+      end
+    end
+
+    it "writes no summary on a dry run" do
+      Dir.mktmpdir do |dir|
+        run_suite(dir, summary_env(dir), ["--dry-run"])
+        expect(File).not_to exist(File.join(dir, "summary.json"))
+      end
     end
   end
 end

@@ -84,6 +84,10 @@ module RaiderReporter
         @buffer = {}
         @attempts = Hash.new(0)
         @attempt = nil
+        @outcomes = {}
+        @failed_before = {}
+        @outcomes_broken = false
+        @expected_cases = nil
         guard { setup(config) if self.class.claim(config) }
       end
 
@@ -95,6 +99,8 @@ module RaiderReporter
         @collector = RaiderReporter.start_collector!
         RaiderReporter.dry_run = config.dry_run?
         config.on_event(:test_run_started) { |_event| guard { @collector.start_run } }
+        config.on_event(:test_run_started) { |event| guard { expect_cases(event.test_cases) } }
+        config.on_event(:test_case_finished) { |event| count_outcome(event.test_case, event.result) }
         config.on_event(:test_case_started) { |event| guard { case_started(event.test_case) } }
         config.on_event(:test_step_finished) { |event| guard { step_finished(event.test_step, event.result) } }
         config.on_event(:test_case_finished) { |event| guard { case_finished(event.test_case, event.result) } }
@@ -124,6 +130,7 @@ module RaiderReporter
         # Always buffer: a lookup problem may lose detail, never the scenario.
         failure = status == "failed" ? safely(nil) { failure_for(problem, result, test_case) } : nil
         fields = identity_for(test_case)
+        status = "quarantined" if status == "failed" && quarantined?(fields)
         key = "#{test_case.location}|#{test_case.name}"
         @attempts[key] += 1
         # The newest attempt replaces the older one, taking its attachments with it.
@@ -135,9 +142,40 @@ module RaiderReporter
       def run_finished
         @buffer.each_value { |result| @collector.add_result(result) }
         @buffer.clear
+        safely(nil) { record_framework_counts }
         RaiderReporter.finish!($stderr)
       ensure
         self.class.release(@config)
+      end
+
+      def expect_cases(test_cases)
+        @expected_cases = test_cases.map { |test_case| "#{test_case.location}|#{test_case.name}" }.uniq.size
+      end
+
+      # Its own handler, registered before case_finished: if counting ever fails, no
+      # summary is written and exec keeps cucumber's exit code. The newest attempt wins,
+      # except that under strict flaky (--strict, --strict-flaky) a scenario that failed
+      # on an earlier attempt and then passed still fails cucumber's run.
+      def count_outcome(test_case, result)
+        return if @outcomes_broken
+
+        key = "#{test_case.location}|#{test_case.name}"
+        failed = !result.ok?(strict: @config.strict)
+        flaky = !failed && @failed_before[key] && @config.strict.strict?(:flaky)
+        @failed_before[key] ||= failed
+        @outcomes[key] = failed || flaky ? true : false
+      rescue StandardError => e
+        @outcomes_broken = true
+        RaiderReporter.warn("#{e.class}: #{e.message}")
+      end
+
+      # Scenarios that make cucumber's run fail; one error outside tests when the run
+      # stopped before every scenario finished (--fail-fast) (spec §4.4).
+      def record_framework_counts
+        return if @outcomes_broken || @expected_cases.nil?
+
+        aborted = @outcomes.size < @expected_cases ? 1 : 0
+        @collector.record_framework_counts(failures: @outcomes.values.count(true), errors_outside_tests: aborted)
       end
 
       def identity_for(test_case)
@@ -150,6 +188,11 @@ module RaiderReporter
           identifier: "#{file_path}:#{line_number}",
           tags: test_case.tags.map { |tag| tag.name.to_s.delete_prefix("@") }.uniq.sort
         }
+      end
+
+      # A lookup problem must never turn a real failure into a quarantined one.
+      def quarantined?(fields)
+        safely(false) { @collector.quarantined?(fields[:file_path], fields[:full_name]) }
       end
 
       def full_name(test_case)

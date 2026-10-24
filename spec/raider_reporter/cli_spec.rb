@@ -401,4 +401,18 @@ RSpec.describe RaiderReporter::CLI do
       end
     end
   end
+
+  it "documents exec in the usage" do
+    described_class.new(["--help"], env: env, out: out, err: err).run
+    expect(err.string).to include("Usage: raider-reporter exec -- <command> [args...]")
+  end
+
+  it "reads quarantined counts from the headline into the commit status" do
+    stub_summary(state: "passed",
+                 markdown: "<!-- raider-reporter:build-comment -->\n**Raider: passed** - 1 quarantined, 148 passed (1m 12s)\n")
+    stub_comment
+    status = stub_status.with(body: hash_including("state" => "success", "description" => "1 quarantined, 148 passed"))
+    expect(run_cli).to eq(0)
+    expect(status).to have_been_requested
+  end
 end
