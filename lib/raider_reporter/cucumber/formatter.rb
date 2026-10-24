@@ -85,6 +85,7 @@ module RaiderReporter
         @attempts = Hash.new(0)
         @attempt = nil
         @outcomes = {}
+        @failed_before = {}
         @outcomes_broken = false
         @expected_cases = nil
         guard { setup(config) if self.class.claim(config) }
@@ -152,11 +153,17 @@ module RaiderReporter
       end
 
       # Its own handler, registered before case_finished: if counting ever fails, no
-      # summary is written and exec keeps cucumber's exit code. The newest attempt wins.
+      # summary is written and exec keeps cucumber's exit code. The newest attempt wins,
+      # except that under strict flaky (--strict, --strict-flaky) a scenario that failed
+      # on an earlier attempt and then passed still fails cucumber's run.
       def count_outcome(test_case, result)
         return if @outcomes_broken
 
-        @outcomes["#{test_case.location}|#{test_case.name}"] = !result.ok?(strict: @config.strict)
+        key = "#{test_case.location}|#{test_case.name}"
+        failed = !result.ok?(strict: @config.strict)
+        flaky = !failed && @failed_before[key] && @config.strict.strict?(:flaky)
+        @failed_before[key] ||= failed
+        @outcomes[key] = failed || flaky ? true : false
       rescue StandardError => e
         @outcomes_broken = true
         RaiderReporter.warn("#{e.class}: #{e.message}")

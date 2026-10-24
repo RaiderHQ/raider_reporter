@@ -598,6 +598,20 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
         .to eq("framework_failures" => 1, "quarantined" => 0, "errors_outside_tests" => 1)
     end
 
+    it "counts a flaky scenario under --strict --retry, which fails cucumber's run" do
+      Dir.mktmpdir do |dir|
+        expect(summary_of("features/retry.feature", "--strict", "--retry", "1", extra_env: attempt_env(dir)))
+          .to eq("framework_failures" => 2, "quarantined" => 0, "errors_outside_tests" => 0)
+      end
+    end
+
+    it "does not count a flaky scenario without --strict" do
+      Dir.mktmpdir do |dir|
+        expect(summary_of("features/retry.feature", "--retry", "1", extra_env: attempt_env(dir)))
+          .to eq("framework_failures" => 1, "quarantined" => 0, "errors_outside_tests" => 0)
+      end
+    end
+
     it "counts a quarantined scenario as both a framework failure and quarantined" do
       key = RaiderReporter.test_key("features/quarantine.feature", "Quarantine: A known flaky failure")
       FakeRaider.with_quarantine([key]) do |env, _server|
