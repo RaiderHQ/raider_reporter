@@ -34,6 +34,18 @@ module RaiderReporter
       @quarantined.include?(RaiderReporter.test_key(file_path, full_name))
     end
 
+    attr_reader :framework_counts
+
+    # What the framework itself counted (spec §4.4); nil until it reports, and
+    # then no exec summary is written.
+    def record_framework_counts(failures:, errors_outside_tests:)
+      @framework_counts = { failures: Integer(failures), errors_outside_tests: Integer(errors_outside_tests) }
+    end
+
+    def quarantined_count
+      @results.count { |result| result.status == "quarantined" }
+    end
+
     def start_test
       @pending_attachments = []
     end

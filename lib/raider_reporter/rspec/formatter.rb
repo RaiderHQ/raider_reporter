@@ -11,7 +11,7 @@ module RaiderReporter
     class Formatter
       ::RSpec::Core::Formatters.register self,
                                          :start, :example_started, :example_passed,
-                                         :example_failed, :example_pending, :close
+                                         :example_failed, :example_pending, :dump_summary, :close
 
       NON_TAG_KEYS = %i[pending skip].freeze
       MAX_MESSAGE = Text::MAX_MESSAGE
@@ -45,6 +45,13 @@ module RaiderReporter
         end
       end
 
+      def dump_summary(notification)
+        guard do
+          @collector.record_framework_counts(failures: notification.failure_count,
+                                             errors_outside_tests: errors_outside_tests(notification))
+        end
+      end
+
       def close(_notification)
         guard { RaiderReporter.finish! }
       end
@@ -70,6 +77,14 @@ module RaiderReporter
           tags: metadata.select { |key, value| value == true && !NON_TAG_KEYS.include?(key) }.keys.map(&:to_s).sort,
           failure: failure
         )
+      end
+
+      # Errors RSpec reported outside examples, plus one when it stopped early
+      # (--fail-fast, an interrupt, a load error): then not every example ran.
+      def errors_outside_tests(notification)
+        world = ::RSpec.world
+        quitting = world.wants_to_quit || (world.respond_to?(:rspec_is_quitting) && world.rspec_is_quitting)
+        notification.errors_outside_of_examples_count + (quitting ? 1 : 0)
       end
 
       def failure_for(exception)

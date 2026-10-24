@@ -45,4 +45,10 @@ RSpec.describe RaiderReporter::Configuration do
     configured.quarantine = true
     expect(configured.quarantine?).to be(true)
   end
+
+  it "reads the exec summary path from RAIDER_EXEC_SUMMARY" do
+    expect(described_class.new("RAIDER_EXEC_SUMMARY" => "/tmp/s.json").exec_summary_path).to eq("/tmp/s.json")
+    expect(described_class.new({}).exec_summary_path).to be_nil
+    expect(described_class.new("RAIDER_EXEC_SUMMARY" => "$(RAIDER_EXEC_SUMMARY)").exec_summary_path).to be_nil
+  end
 end

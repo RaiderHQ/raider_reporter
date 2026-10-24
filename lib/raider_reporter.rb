@@ -9,6 +9,7 @@ require_relative "raider_reporter/app_frame"
 require_relative "raider_reporter/payload"
 require_relative "raider_reporter/configuration"
 require_relative "raider_reporter/quarantine"
+require_relative "raider_reporter/exec_summary"
 require_relative "raider_reporter/content_types"
 require_relative "raider_reporter/collector"
 require_relative "raider_reporter/writers/local"
@@ -90,6 +91,8 @@ module RaiderReporter
     def finish!(output = $stderr)
       return nil if dry_run?
 
+      write_exec_summary
+
       detector = CiDetector.new
       ci = detector.ci
       shard = ShardDetector.new(job: ci&.fetch("job", nil)).shard
@@ -115,6 +118,19 @@ module RaiderReporter
     end
 
     private
+
+    # First, so a later reporting problem cannot lose it. A failure here only means
+    # no summary, and exec then keeps the command's exit code.
+    def write_exec_summary
+      path = configuration.exec_summary_path
+      counts = collector&.framework_counts
+      return if path.nil? || counts.nil?
+
+      ExecSummary.write(path, framework_failures: counts[:failures], quarantined: collector.quarantined_count,
+                              errors_outside_tests: counts[:errors_outside_tests])
+    rescue StandardError => e
+      warn("could not write the exec summary: #{e.class}: #{e.message}")
+    end
 
     def write_html_report
       return unless configuration.html_report

@@ -84,6 +84,9 @@ module RaiderReporter
         @buffer = {}
         @attempts = Hash.new(0)
         @attempt = nil
+        @outcomes = {}
+        @outcomes_broken = false
+        @expected_cases = nil
         guard { setup(config) if self.class.claim(config) }
       end
 
@@ -95,6 +98,8 @@ module RaiderReporter
         @collector = RaiderReporter.start_collector!
         RaiderReporter.dry_run = config.dry_run?
         config.on_event(:test_run_started) { |_event| guard { @collector.start_run } }
+        config.on_event(:test_run_started) { |event| guard { expect_cases(event.test_cases) } }
+        config.on_event(:test_case_finished) { |event| count_outcome(event.test_case, event.result) }
         config.on_event(:test_case_started) { |event| guard { case_started(event.test_case) } }
         config.on_event(:test_step_finished) { |event| guard { step_finished(event.test_step, event.result) } }
         config.on_event(:test_case_finished) { |event| guard { case_finished(event.test_case, event.result) } }
@@ -136,9 +141,34 @@ module RaiderReporter
       def run_finished
         @buffer.each_value { |result| @collector.add_result(result) }
         @buffer.clear
+        safely(nil) { record_framework_counts }
         RaiderReporter.finish!($stderr)
       ensure
         self.class.release(@config)
+      end
+
+      def expect_cases(test_cases)
+        @expected_cases = test_cases.map { |test_case| "#{test_case.location}|#{test_case.name}" }.uniq.size
+      end
+
+      # Its own handler, registered before case_finished: if counting ever fails, no
+      # summary is written and exec keeps cucumber's exit code. The newest attempt wins.
+      def count_outcome(test_case, result)
+        return if @outcomes_broken
+
+        @outcomes["#{test_case.location}|#{test_case.name}"] = !result.ok?(strict: @config.strict)
+      rescue StandardError => e
+        @outcomes_broken = true
+        RaiderReporter.warn("#{e.class}: #{e.message}")
+      end
+
+      # Scenarios that make cucumber's run fail; one error outside tests when the run
+      # stopped before every scenario finished (--fail-fast) (spec §4.4).
+      def record_framework_counts
+        return if @outcomes_broken || @expected_cases.nil?
+
+        aborted = @outcomes.size < @expected_cases ? 1 : 0
+        @collector.record_framework_counts(failures: @outcomes.values.count(true), errors_outside_tests: aborted)
       end
 
       def identity_for(test_case)

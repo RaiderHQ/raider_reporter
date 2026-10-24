@@ -574,4 +574,36 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       end
     end
   end
+
+  describe "exec summary" do
+    def summary_of(feature = "features/login.feature", *args, extra_env: {})
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "summary.json")
+        run_cucumber(feature, extra_args: args, extra_env: extra_env.merge("RAIDER_EXEC_SUMMARY" => path))
+        JSON.parse(File.read(path)).except("pid")
+      end
+    end
+
+    it "counts failed and ambiguous scenarios" do
+      expect(summary_of).to eq("framework_failures" => 2, "quarantined" => 0, "errors_outside_tests" => 0)
+    end
+
+    it "also counts pending and undefined scenarios under --strict" do
+      expect(summary_of("features/login.feature", "--strict"))
+        .to eq("framework_failures" => 4, "quarantined" => 0, "errors_outside_tests" => 0)
+    end
+
+    it "reports an error outside tests when --fail-fast stops before every scenario ran" do
+      expect(summary_of("features/login.feature", "--fail-fast"))
+        .to eq("framework_failures" => 1, "quarantined" => 0, "errors_outside_tests" => 1)
+    end
+
+    it "counts a quarantined scenario as both a framework failure and quarantined" do
+      key = RaiderReporter.test_key("features/quarantine.feature", "Quarantine: A known flaky failure")
+      FakeRaider.with_quarantine([key]) do |env, _server|
+        expect(summary_of("features/quarantine.feature", extra_env: env))
+          .to eq("framework_failures" => 1, "quarantined" => 1, "errors_outside_tests" => 0)
+      end
+    end
+  end
 end

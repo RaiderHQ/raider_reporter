@@ -181,4 +181,65 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
       end
     end
   end
+
+  def run_source(dir, source, extra_env = {}, extra_args = [])
+    File.write(File.join(dir, "inline_spec.rb"), source)
+    env = { "RAIDER_TOKEN" => nil, "RAIDER_ENDPOINT" => nil, "RAIDER_QUARANTINE" => nil, "RAIDER_EXEC_SUMMARY" => nil,
+            "GITHUB_ACTIONS" => nil, "GITHUB_JOB" => nil }.merge(extra_env)
+    Open3.capture2e(
+      env, RbConfig.ruby, "-I", lib_dir, Gem.bin_path("rspec-core", "rspec"),
+      "--require", "raider_reporter/rspec", "--format", "progress",
+      "--format", "RaiderReporter::RSpec::Formatter", *extra_args, "inline_spec.rb",
+      chdir: dir
+    )
+  end
+
+  describe "exec summary" do
+    def summary_env(dir) = { "RAIDER_EXEC_SUMMARY" => File.join(dir, "summary.json") }
+
+    def summary(dir) = JSON.parse(File.read(File.join(dir, "summary.json"))).except("pid")
+
+    it "writes RSpec's failure count with no errors outside examples" do
+      Dir.mktmpdir do |dir|
+        output, = run_suite(dir, summary_env(dir))
+        expect(summary(dir)).to eq({ "framework_failures" => 2, "quarantined" => 0, "errors_outside_tests" => 0 }), output
+      end
+    end
+
+    it "counts the quarantined failures it reported" do
+      key = RaiderReporter.test_key("sample_spec.rb", "Sample fails with a screenshot")
+      Dir.mktmpdir do |dir|
+        FakeRaider.with_quarantine([key]) do |env, _server|
+          run_suite(dir, env.merge(summary_env(dir)))
+          expect(summary(dir)).to eq("framework_failures" => 2, "quarantined" => 1, "errors_outside_tests" => 0)
+        end
+      end
+    end
+
+    it "counts an after(:context) error as an error outside examples" do
+      Dir.mktmpdir do |dir|
+        output, = run_source(dir, <<~RUBY, summary_env(dir))
+          RSpec.describe "Q" do
+            after(:context) { raise "teardown exploded" }
+            it("fails") { expect(1).to eq(2) }
+          end
+        RUBY
+        expect(summary(dir)).to eq({ "framework_failures" => 1, "quarantined" => 0, "errors_outside_tests" => 1 }), output
+      end
+    end
+
+    it "counts a --fail-fast stop as an error outside examples" do
+      Dir.mktmpdir do |dir|
+        output, = run_suite(dir, summary_env(dir), ["--fail-fast"])
+        expect(summary(dir)).to eq({ "framework_failures" => 1, "quarantined" => 0, "errors_outside_tests" => 1 }), output
+      end
+    end
+
+    it "writes no summary on a dry run" do
+      Dir.mktmpdir do |dir|
+        run_suite(dir, summary_env(dir), ["--dry-run"])
+        expect(File).not_to exist(File.join(dir, "summary.json"))
+      end
+    end
+  end
 end
