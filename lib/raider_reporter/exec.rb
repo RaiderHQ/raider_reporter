@@ -34,6 +34,7 @@ module RaiderReporter
       @err = err
       @pid = nil
       @code = nil
+      @pending = nil
     end
 
     def run
@@ -54,6 +55,8 @@ module RaiderReporter
       previous = install_traps
       @pid = start(summary_path)
       return NOT_STARTED unless @pid
+
+      forward(@pending) if @pending
 
       @code = wait
       summary = ExecSummary.read(summary_path)
@@ -78,15 +81,18 @@ module RaiderReporter
       status.signaled? ? 128 + status.termsig : status.exitstatus
     end
 
-    # Installed before spawning so a signal that arrives early is not lost. A Ruby
-    # handler (not "IGNORE") is reset to the default in the child by exec(2).
+    def forward(signal)
+      Process.kill(signal, @pid)
+    rescue SystemCallError
+      nil
+    end
+
+    # Installed before spawning; a signal that arrives before the child exists is kept in
+    # @pending and forwarded right after spawn. A Ruby handler (not "IGNORE") is reset to
+    # the default in the child by exec(2).
     def install_traps
       forwarded = FORWARDED.to_h do |signal|
-        handler = trap(signal) do
-          Process.kill(signal, @pid) if @pid
-        rescue SystemCallError
-          nil
-        end
+        handler = trap(signal) { @pid ? forward(signal) : @pending = signal }
         [signal, handler]
       end
       forwarded.merge(IGNORED.to_h { |signal| [signal, trap(signal) {}] })

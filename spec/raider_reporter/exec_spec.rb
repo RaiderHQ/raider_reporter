@@ -74,13 +74,35 @@ RSpec.describe "raider-reporter exec" do
     expect(status.exitstatus).to eq(137)
   end
 
-  it "forwards TERM to the command and exits with the command's code" do
-    script = 'trap("TERM") { puts "child got TERM"; exit 7 }; puts "ready"; $stdout.flush; sleep 10'
+  %w[TERM HUP].each do |name|
+    it "forwards #{name} to the command and exits with the command's code" do
+      script = %(trap("#{name}") { puts "child got #{name}"; exit 7 }; puts "ready"; $stdout.flush; sleep 10)
+      Open3.popen3(clean_env, RbConfig.ruby, "-I", lib_dir, exe, "exec", "--", *ruby(script)) do |_in, out, _err, thread|
+        expect(out.gets).to eq("ready\n")
+        Process.kill(name, thread.pid)
+        expect(out.read).to eq("child got #{name}\n")
+        expect(thread.value.exitstatus).to eq(7)
+      end
+    end
+  end
+
+  it "ignores INT sent to itself while the command runs" do
+    script = 'trap("INT") { puts "child got INT"; exit 9 }; puts "ready"; $stdout.flush; sleep 1; exit 4'
     Open3.popen3(clean_env, RbConfig.ruby, "-I", lib_dir, exe, "exec", "--", *ruby(script)) do |_in, out, _err, thread|
       expect(out.gets).to eq("ready\n")
-      Process.kill("TERM", thread.pid)
-      expect(out.read).to eq("child got TERM\n")
-      expect(thread.value.exitstatus).to eq(7)
+      Process.kill("INT", thread.pid)
+      expect(out.read).to eq("")
+      expect(thread.value.exitstatus).to eq(4)
+    end
+  end
+
+  it "gives the command its own summary path, not an inherited RAIDER_EXEC_SUMMARY" do
+    Dir.mktmpdir do |dir|
+      stale = File.join(dir, "stale.json")
+      File.write(stale, JSON.generate("framework_failures" => 1, "quarantined" => 1, "errors_outside_tests" => 0))
+      _out, err, status = raider_exec("--", *ruby("exit 1"), env: { "RAIDER_EXEC_SUMMARY" => stale })
+      expect(status.exitstatus).to eq(1)
+      expect(err).not_to include("did not fail the build")
     end
   end
 
