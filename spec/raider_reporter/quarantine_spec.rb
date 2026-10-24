@@ -72,10 +72,10 @@ RSpec.describe RaiderReporter::Quarantine do
     expect(warnings.first).not_to include("s3cr3t")
   end
 
-  it "starts the request with 3 second open and read timeouts" do
+  it "starts the request with 3 second timeouts and no retry" do
     stub_request(:get, url).to_return(status: 200, body: body)
     expect(Net::HTTP).to receive(:start)
-      .with("raider.test", 443, hash_including(open_timeout: 3, read_timeout: 3)).and_call_original
+      .with("raider.test", 443, hash_including(open_timeout: 3, read_timeout: 3, max_retries: 0)).and_call_original
 
     described_class.load(config, warn: warn)
   end
@@ -97,7 +97,7 @@ RSpec.describe RaiderReporter::Quarantine do
 
         keys = described_class.load(config(endpoint: server.url), warn: warn)
 
-        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 2
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 0.9 # under 2 x TIMEOUT: a retry or a missing deadline would exceed it
         expect(keys).to be_empty
         expect(warnings.size).to eq(1)
       ensure

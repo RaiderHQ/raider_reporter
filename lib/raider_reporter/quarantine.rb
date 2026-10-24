@@ -53,7 +53,7 @@ module RaiderReporter
       # The per-step timeouts do not bound a server that trickles bytes; the deadline does.
       response = Timeout.timeout(TIMEOUT) do
         Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                            open_timeout: TIMEOUT, read_timeout: TIMEOUT) { |http| http.request(request) }
+                                            open_timeout: TIMEOUT, read_timeout: TIMEOUT, max_retries: 0) { |http| http.request(request) }
       end
       raise Unavailable, "HTTP #{response.code}" unless response.code == "200"
 
