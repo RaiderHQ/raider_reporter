@@ -1,6 +1,6 @@
 # raider_reporter
 
-Raider-schema test reporting for RSpec and Cucumber. `raider_reporter` is an RSpec formatter and a Cucumber reporter that records every example's result, failure details, screenshots and videos, writes them to a local `run.json` (schema v1), and can optionally upload the run to a Raider server. It replaces Allure for Ruby Raider projects.
+Raider-schema test reporting for RSpec and Cucumber. `raider_reporter` is an RSpec formatter and a Cucumber reporter that records every example's result, failure details, screenshots and videos, writes them to a local `run.json` (schema v1, or v2 when a run has a quarantined result), and can optionally upload the run to a Raider server. It replaces Allure for Ruby Raider projects.
 
 It has no runtime dependencies and requires Ruby 3.2 or newer.
 
@@ -145,7 +145,7 @@ end
 
 ```
 raider-results/
-  run.json          # the run in schema v1
+  run.json          # the run in schema v1 (v2 with quarantined results)
   attachments/      # copies of attached screenshots and videos
   index.html        # the local report, see below
 ```
