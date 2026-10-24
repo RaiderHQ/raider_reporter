@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
 require "raider_reporter"
+require "raider_reporter/exec"
 
 module RaiderReporter
+  # `raider-reporter exec -- <command…>` runs the test suite and decides the build's exit code (see Exec).
   # `raider-reporter comment` posts the build summary as a PR comment and sets a commit status
   # (fail-open: always exits 0, notices go to stderr). `raider-reporter report [dir]` rebuilds the
   # local HTML report (exits 1 when there are no run files or the report cannot be written).
@@ -24,6 +26,8 @@ module RaiderReporter
     }.freeze
     DEFAULT_API_URL = "https://api.github.com"
     USAGE = <<~TEXT
+      #{Exec::USAGE.chomp}
+
       Usage: raider-reporter report [dir]
 
       Rebuilds <dir>/index.html (default raider-results) from every run*.json in it. Prints its path.
@@ -48,6 +52,20 @@ module RaiderReporter
     end
 
     def run
+      return run_exec if @argv.first == "exec"
+
+      run_reporting
+    end
+
+    private
+
+    # exec decides the build's exit code; Exec owns its own failure handling.
+    def run_exec
+      command = @argv[1] == "--" ? @argv.drop(2) : []
+      Exec.new(command, err: @err).run
+    end
+
+    def run_reporting
       return report if @argv.first == "report" && !@argv.include?("--help") && !@argv.include?("-h")
 
       command = @argv.first
@@ -61,8 +79,6 @@ module RaiderReporter
       notice("comment failed: #{e.class}: #{e.message}")
       0
     end
-
-    private
 
     def report
       dir = File.expand_path(@argv[1] || "raider-results")
@@ -181,7 +197,7 @@ module RaiderReporter
       url.empty? ? DEFAULT_API_URL : url
     end
 
-    # "**Raider: failed** - 2 failed, 148 passed, 3 skipped (1m 12s)" -> "2 failed, 148 passed, 3 skipped".
+    # "**Raider: failed** - 2 failed, 1 quarantined, 148 passed (1m 12s)" -> "2 failed, 1 quarantined, 148 passed".
     # Falls back to a fixed text per state when the Markdown carries no headline counts.
     def description(summary)
       counts = headline_counts(summary.markdown)
@@ -193,7 +209,7 @@ module RaiderReporter
       line = markdown.to_s.lines.find { |l| l.include?("Raider:") }
       return nil unless line
 
-      counts = line.scan(/\b\d+ (?:failed|passed|skipped|pending)\b/)
+      counts = line.scan(/\b\d+ (?:failed|quarantined|passed|skipped|pending)\b/)
       counts.empty? ? nil : counts.join(", ")
     end
 
