@@ -135,4 +135,12 @@ RSpec.describe RaiderReporter::Comment::GithubClient do
       expect { secret.upsert_comment(7, "b", marker) }.to raise_error(described_class::Error) { |e| expect(e.message).not_to include("s3cr3t-token") }
     end
   end
+
+  describe ".api_url" do
+    it "falls back to github.com when GITHUB_API_URL is unset or blank and honours a custom host" do
+      expect(described_class.api_url({})).to eq("https://api.github.com")
+      expect(described_class.api_url("GITHUB_API_URL" => "  ")).to eq("https://api.github.com")
+      expect(described_class.api_url("GITHUB_API_URL" => "https://ghe.test/api/v3")).to eq("https://ghe.test/api/v3")
+    end
+  end
 end

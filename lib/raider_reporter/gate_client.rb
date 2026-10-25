@@ -3,6 +3,7 @@
 require "cgi/escape"
 require "json"
 require "net/http"
+require "openssl"
 require "timeout"
 require "uri"
 require "raider_reporter/version"
@@ -16,7 +17,8 @@ module RaiderReporter
     PATH = "/api/v1/builds/gate"
     TIMEOUT = 10
     STATES = %w[pending none passed failed].freeze
-    NETWORK_ERRORS = [Timeout::Error, SystemCallError, SocketError, IOError].freeze
+    NETWORK_ERRORS = [Timeout::Error, SystemCallError, SocketError, IOError, OpenSSL::SSL::SSLError,
+                      Net::ProtocolError, Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError].freeze
 
     # kind: :verdict, :retry, :rejected, :not_found or :error.
     Response = Data.define(:kind, :data, :code, :reason)

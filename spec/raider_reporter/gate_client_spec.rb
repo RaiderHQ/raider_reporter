@@ -61,6 +61,14 @@ RSpec.describe RaiderReporter::GateClient do
     expect(client.fetch(key)).to have_attributes(kind: :retry, reason: start_with("Errno::ECONNREFUSED"))
   end
 
+  it "classifies a TLS failure and a protocol error as retryable, redacting the token" do
+    stub_gate.to_raise(OpenSSL::SSL::SSLError.new("handshake rt-secret failed"))
+    expect(client.fetch(key)).to have_attributes(kind: :retry,
+                                                 reason: "OpenSSL::SSL::SSLError: handshake [REDACTED] failed")
+    stub_gate.to_raise(Net::HTTPBadResponse)
+    expect(client.fetch(key)).to have_attributes(kind: :retry, reason: start_with("Net::HTTPBadResponse"))
+  end
+
   it "returns an error for a body that is not JSON" do
     stub_gate.to_return(status: 200, body: "<html>")
     expect(client.fetch(key)).to have_attributes(kind: :error, reason: start_with("JSON::ParserError: "))
