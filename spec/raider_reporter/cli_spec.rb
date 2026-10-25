@@ -407,6 +407,21 @@ RSpec.describe RaiderReporter::CLI do
     expect(err.string).to include("Usage: raider-reporter exec -- <command> [args...]")
   end
 
+  it "documents gate in the usage" do
+    described_class.new(["--help"], env: env, out: out, err: err).run
+    expect(err.string).to include("Usage: raider-reporter gate", "RAIDER_GATE_TIMEOUT")
+  end
+
+  it "runs gate and returns its exit code" do
+    expect(described_class.new(["gate"], env: {}, out: out, err: err).run).to eq(2)
+    expect(err.string).to eq("raider-reporter gate: no CI build key (run this in GitHub Actions or Azure Pipelines)\n")
+  end
+
+  it "prints the gate usage for gate --help and exits 0" do
+    expect(described_class.new(["gate", "--help"], env: env, out: out, err: err).run).to eq(0)
+    expect(err.string).to start_with("Usage: raider-reporter gate")
+  end
+
   it "reads quarantined counts from the headline into the commit status" do
     stub_summary(state: "passed",
                  markdown: "<!-- raider-reporter:build-comment -->\n**Raider: passed** - 1 quarantined, 148 passed (1m 12s)\n")
