@@ -147,10 +147,11 @@ RSpec.describe RaiderReporter::Gate do
     end
 
     it "exits 2 at once on unparseable JSON without printing the token" do
-      stub = gate_stub.to_return(status: 200, body: "oops rt-secret")
+      stub = gate_stub.to_return(status: 200, body: "rt-secret oops")
       expect(run_gate).to eq(2)
       expect(stub).to have_been_requested.once
       expect(err.string).to start_with("raider-reporter gate: JSON::ParserError: ")
+      expect(err.string).to include("[REDACTED]")
       expect(err.string).not_to include("rt-secret")
     end
 
