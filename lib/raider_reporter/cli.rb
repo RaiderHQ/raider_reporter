@@ -24,7 +24,6 @@ module RaiderReporter
       "failed" => "Raider: tests failed",
       "incomplete" => "Raider: build incomplete"
     }.freeze
-    DEFAULT_API_URL = "https://api.github.com"
     USAGE = <<~TEXT
       #{Exec::USAGE.chomp}
 
@@ -161,8 +160,7 @@ module RaiderReporter
     end
 
     def azure_pr_url(pr)
-      "#{AzureEnv.collection_base(@env)}#{AzureEnv.value(@env, 'SYSTEM_TEAMPROJECTID')}/_apis/git/repositories/" \
-        "#{AzureEnv.value(@env, 'BUILD_REPOSITORY_ID')}/pullRequests/#{pr['number']}"
+      AzureEnv.pull_request_api_url(@env, pr["number"])
     end
 
     def azure_forbidden_message
@@ -193,8 +191,7 @@ module RaiderReporter
     end
 
     def api_url
-      url = @env["GITHUB_API_URL"].to_s.strip
-      url.empty? ? DEFAULT_API_URL : url
+      Comment::GithubClient.api_url(@env)
     end
 
     # "**Raider: failed** - 2 failed, 1 quarantined, 148 passed (1m 12s)" -> "2 failed, 1 quarantined, 148 passed".

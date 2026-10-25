@@ -53,4 +53,22 @@ RSpec.describe RaiderReporter::AzureEnv do
       expect(described_class.strip_heads(nil)).to be_nil
     end
   end
+
+  describe ".pull_request_api_url" do
+    let(:env) do
+      { "SYSTEM_COLLECTIONURI" => "https://dev.azure.com/org/", "SYSTEM_TEAMPROJECTID" => "proj-id",
+        "BUILD_REPOSITORY_ID" => "repo-id" }
+    end
+
+    it "builds the pull request REST base" do
+      expect(described_class.pull_request_api_url(env, 7))
+        .to eq("https://dev.azure.com/org/proj-id/_apis/git/repositories/repo-id/pullRequests/7")
+    end
+
+    it "is nil when a part is missing or an undefined macro" do
+      expect(described_class.pull_request_api_url(env.merge("BUILD_REPOSITORY_ID" => "$(Build.Repository.ID)"), 7)).to be_nil
+      expect(described_class.pull_request_api_url(env.merge("SYSTEM_COLLECTIONURI" => ""), 7)).to be_nil
+      expect(described_class.pull_request_api_url(env, nil)).to be_nil
+    end
+  end
 end
