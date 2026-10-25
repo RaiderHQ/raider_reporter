@@ -38,9 +38,9 @@ module RaiderReporter
         end
       end
 
-      def set_status(state:, description:, target_url:)
+      def set_status(state:, description:, target_url:, name: "tests")
         request(:post, "/statuses", { state: state, description: description.to_s[0, DESCRIPTION_LIMIT],
-                                      targetUrl: target_url, context: { genre: "raider", name: "tests" } },
+                                      targetUrl: target_url, context: { genre: "raider", name: name } },
                 version: STATUS_API_VERSION)
         nil
       end

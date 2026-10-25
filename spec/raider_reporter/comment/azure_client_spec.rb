@@ -102,6 +102,16 @@ RSpec.describe RaiderReporter::Comment::AzureClient do
     expect(stub).to have_been_requested
   end
 
+  it "uses the given status name" do
+    stub = stub_request(:post, "#{base}/statuses").with(
+      query: { "api-version" => "7.1" },
+      body: { state: "pending", description: "Waiting for the Raider verdict", targetUrl: nil,
+              context: { genre: "raider", name: "gate" } }.to_json
+    ).to_return(status: 200, body: "{}")
+    client.set_status(state: "pending", description: "Waiting for the Raider verdict", target_url: nil, name: "gate")
+    expect(stub).to have_been_requested
+  end
+
   it "raises Forbidden on 401, 403 and 404" do
     [401, 403, 404].each do |code|
       stub_request(:get, "#{base}/threads").with(query: hash_including({})).to_return(status: code, body: "{}")

@@ -2,9 +2,11 @@
 
 require "raider_reporter"
 require "raider_reporter/exec"
+require "raider_reporter/gate"
 
 module RaiderReporter
   # `raider-reporter exec -- <command…>` runs the test suite and decides the build's exit code (see Exec).
+  # `raider-reporter gate` waits for the Raider quality gate verdict and exits 0, 1 or 2 (see Gate).
   # `raider-reporter comment` posts the build summary as a PR comment and sets a commit status
   # (fail-open: always exits 0, notices go to stderr). `raider-reporter report [dir]` rebuilds the
   # local HTML report (exits 1 when there are no run files or the report cannot be written).
@@ -24,9 +26,10 @@ module RaiderReporter
       "failed" => "Raider: tests failed",
       "incomplete" => "Raider: build incomplete"
     }.freeze
-    DEFAULT_API_URL = "https://api.github.com"
     USAGE = <<~TEXT
       #{Exec::USAGE.chomp}
+
+      #{Gate::USAGE.chomp}
 
       Usage: raider-reporter report [dir]
 
@@ -53,6 +56,7 @@ module RaiderReporter
 
     def run
       return run_exec if @argv.first == "exec"
+      return run_gate if @argv.first == "gate"
 
       run_reporting
     end
@@ -63,6 +67,16 @@ module RaiderReporter
     def run_exec
       command = @argv[1] == "--" ? @argv.drop(2) : []
       Exec.new(command, err: @err).run
+    end
+
+    # gate decides the CI job's exit code; Gate owns its own failure handling.
+    def run_gate
+      if @argv.include?("--help") || @argv.include?("-h")
+        @err.puts(Gate::USAGE)
+        return 0
+      end
+
+      Gate.new(env: @env, out: @out, err: @err).run
     end
 
     def run_reporting
@@ -161,8 +175,7 @@ module RaiderReporter
     end
 
     def azure_pr_url(pr)
-      "#{AzureEnv.collection_base(@env)}#{AzureEnv.value(@env, 'SYSTEM_TEAMPROJECTID')}/_apis/git/repositories/" \
-        "#{AzureEnv.value(@env, 'BUILD_REPOSITORY_ID')}/pullRequests/#{pr['number']}"
+      AzureEnv.pull_request_api_url(@env, pr["number"])
     end
 
     def azure_forbidden_message
@@ -193,8 +206,7 @@ module RaiderReporter
     end
 
     def api_url
-      url = @env["GITHUB_API_URL"].to_s.strip
-      url.empty? ? DEFAULT_API_URL : url
+      Comment::GithubClient.api_url(@env)
     end
 
     # "**Raider: failed** - 2 failed, 1 quarantined, 148 passed (1m 12s)" -> "2 failed, 1 quarantined, 148 passed".

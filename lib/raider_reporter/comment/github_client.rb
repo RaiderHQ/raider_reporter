@@ -15,8 +15,15 @@ module RaiderReporter
       MAX_PAGES = 10
       PER_PAGE = 100
       DESCRIPTION_LIMIT = 140
+      DEFAULT_API_URL = "https://api.github.com"
 
-      def initialize(token:, repository:, api_url: "https://api.github.com", timeout: 30)
+      # GITHUB_API_URL from a CI env, falling back to github.com when unset or blank.
+      def self.api_url(env)
+        url = env["GITHUB_API_URL"].to_s.strip
+        url.empty? ? DEFAULT_API_URL : url
+      end
+
+      def initialize(token:, repository:, api_url: DEFAULT_API_URL, timeout: 30)
         @token = token
         @repository = repository
         @api_url = api_url.to_s.strip.sub(%r{/+\z}, "")

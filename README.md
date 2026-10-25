@@ -228,6 +228,42 @@ On pull requests, `raider-reporter comment` posts one comment with the build's r
 - The command never fails your CI: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`; if one is missing, or the event is not a pull request, it does nothing.
 - It requires a Raider server that supports the summary endpoint and the `git.pr` field. Upgrade the server before using it.
 
+## Quality gate
+
+A Raider project can turn on gate rules (minimum pass rate, no new failures against the default branch, no new flaky tests) under its Gate page. Raider computes one verdict per build once every shard is in, and never changes it. `raider-reporter gate` waits for that verdict in CI and fails the job when the gate fails. Run it once, after every test job:
+
+```yaml
+  raider-gate:
+    needs: [test]   # every test job id
+    if: always() && vars.RAIDER_GATE == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with: { ruby-version: "3.4", bundler-cache: true }
+      - name: Wait for the Raider quality gate
+        run: bundle exec raider-reporter gate
+        env:
+          RAIDER_TOKEN: ${{ secrets.RAIDER_TOKEN }}
+          RAIDER_ENDPOINT: ${{ vars.RAIDER_ENDPOINT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+| Outcome | Exit | Output |
+|---|---|---|
+| passed | 0 | stdout: `raider-reporter gate: passed` and one line per rule |
+| no gate rules | 0 | stdout: `raider-reporter gate: no gate rules for this project` |
+| failed | 1 | stderr: `raider-reporter gate: failed`, one line per failed rule (`  ✗ pass rate: 96% < 98%`) and the build URL |
+| no verdict | 2 | stderr: timeout, Raider unreachable, token rejected, build not found, or another error |
+
+- It polls every 10 seconds (10-second timeouts) for up to `RAIDER_GATE_TIMEOUT` seconds (default 600, 1–3600) and retries 429, 5xx and network errors. While waiting it prints, at most once a minute, `waiting for the verdict (build incomplete: 2 of 4 shards)` or `(analysing results)`.
+- It needs `RAIDER_TOKEN`, `RAIDER_ENDPOINT` and the CI build key that uploads and `comment` use (GitHub Actions or Azure Pipelines); without them it exits 2.
+- It posts a `raider/gate` status: pending while it waits, then success, failure (the failed rules) or error. On GitHub it needs `GITHUB_TOKEN` and `statuses: write`, and uses the PR head commit on `pull_request` events, else `GITHUB_SHA`. On Azure Repos pull requests it needs `SYSTEM_ACCESSTOKEN: $(System.AccessToken)`; other Azure builds get no status. A status that cannot be posted prints a warning and never changes the exit code. Require the `raider/gate` check in branch protection to block merges.
+- Unlike `comment`, `gate` fails closed. Turn it on per repository (the `RAIDER_GATE` variable above) so pull requests from forks and projects without a token are not blocked. The token is never printed.
+
 ## Azure Pipelines
 
 The gem detects Azure Pipelines when `TF_BUILD` is `true`. It reports the build (`provider: azure_pipelines`, build URL, attempt, job), the branch and commit, the pull request and a build key, so shards of one build group together. On a pull request from Azure Repos, `raider-reporter comment` posts one comment thread with the results and sets a `raider/tests` status on the PR.

@@ -26,6 +26,16 @@ module RaiderReporter
       value(env, "BUILD_REASON") == "PullRequest" && value(env, "BUILD_REPOSITORY_PROVIDER") == "TfsGit"
     end
 
+    # The REST base of a pull request (threads, statuses), or nil when a part is unknown.
+    def pull_request_api_url(env, number)
+      base = collection_base(env)
+      project = value(env, "SYSTEM_TEAMPROJECTID")
+      repo = value(env, "BUILD_REPOSITORY_ID")
+      return nil unless base && project && repo && number
+
+      "#{base}#{project}/_apis/git/repositories/#{repo}/pullRequests/#{number}"
+    end
+
     def strip_heads(ref)
       return nil if ref.nil?
       return ref.delete_prefix("refs/heads/") if ref.start_with?("refs/heads/")

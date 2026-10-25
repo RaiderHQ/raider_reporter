@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 — 2026-10-24
+
+- `raider-reporter gate` waits for the Raider quality gate verdict of the CI build (`GET /api/v1/builds/gate`, every 10 seconds, up to `RAIDER_GATE_TIMEOUT` seconds, default 600, 1–3600) and exits 0 when the gate passed or the project has no gate rules, 1 when it failed (naming the failed rules), and 2 when it gets no verdict (timeout, Raider unreachable, token rejected, build not found, any other error). 429, 5xx and network errors are retried within the time limit
+- It posts a `raider/gate` status: a GitHub commit status on the PR head commit (`pull_request` events) or `GITHUB_SHA`, or an Azure Repos PR status; pending while it waits, then success, failure or error. Best effort: a post that fails prints a warning and never changes the exit code
+- `exec`, uploads and `comment` are unchanged and stay fail-open
+- Needs a Raider server with the gate endpoint
+
 ## 0.8.0 — 2026-10-24
 
 - Quarantine: with `RAIDER_QUARANTINE=1` (or `config.quarantine = true`) and a token and endpoint, the formatters fetch the project's quarantine list once per run (`GET /api/v1/quarantine`, 3-second timeout) and report matching failures as `quarantined`, keeping their message, backtrace and attachments. Fail-open: any fetch problem prints `[raider_reporter] quarantine list unavailable (<reason>); no tests quarantined` and nothing is quarantined
