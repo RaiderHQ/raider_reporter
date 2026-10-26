@@ -48,28 +48,38 @@ module RaiderReporter
 
       private
 
-      # Keeps the leading attachments that fit the byte and count budget and
-      # rebuilds the payload without the rest, so part names stay contiguous.
-      # The local run.json is written from the original payload and keeps all.
+      # Keeps the attachments that fit the byte and count budget, non-video
+      # attachments first and videos in whatever room is left, and rebuilds the
+      # payload without the rest, so part names stay contiguous. Survivors keep
+      # their original order. The local run.json is written from the original
+      # payload and keeps all.
       def within_budget(payload)
         entries = payload.attachment_entries
-        bytes = 0
-        keep = entries.index do |entry|
-          bytes += File.size?(entry[:attachment].source_path).to_i
-          bytes > MAX_UPLOAD_ATTACHMENT_BYTES
-        end || entries.size
-        keep = [keep, MAX_UPLOAD_ATTACHMENTS].min
-        return payload if keep == entries.size
+        keep = budgeted(entries)
+        return payload if keep.size == entries.size
 
-        dropped = entries.size - keep
+        dropped = entries.size - keep.size
         @warn.call("not uploading #{dropped} #{dropped == 1 ? 'attachment' : 'attachments'}: over the upload " \
                    "budget of #{MAX_UPLOAD_ATTACHMENT_BYTES / (1024 * 1024)} MB / " \
                    "#{MAX_UPLOAD_ATTACHMENTS} files; they remain in #{@config.output_dir}")
-        seen = 0
         run = payload.run
         Payload.new(run.with(results: run.results.map do |result|
-          result.with(attachments: result.attachments.select { (seen += 1) <= keep })
+          result.with(attachments: result.attachments.select { |attachment| keep.key?(attachment) })
         end))
+      end
+
+      # Identity-keyed set of the attachments to upload, in priority order.
+      def budgeted(entries)
+        ordered = entries.partition { |entry| !entry[:attachment].content_type.to_s.start_with?("video/") }.flatten
+        bytes = 0
+        keep = {}.compare_by_identity
+        ordered.first(MAX_UPLOAD_ATTACHMENTS).each do |entry|
+          bytes += File.size?(entry[:attachment].source_path).to_i
+          break if bytes > MAX_UPLOAD_ATTACHMENT_BYTES
+
+          keep[entry[:attachment]] = true
+        end
+        keep
       end
 
       def add_field(body, boundary, name, value)
