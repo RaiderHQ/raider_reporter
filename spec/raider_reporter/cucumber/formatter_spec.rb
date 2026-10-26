@@ -9,6 +9,9 @@ require_relative "../../support/fake_raider"
 RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   let(:lib_dir) { File.expand_path("../../../lib", __dir__) }
   let(:fixture_dir) { File.expand_path("../../fixtures/cucumber", __dir__) }
+  # Cucumber 12 dropped the strict configuration: no --strict flags, and pending and
+  # undefined always fail the run. Specs only; the formatter detects by capability.
+  let(:cucumber12) { Gem.loaded_specs.fetch("cucumber").version >= Gem::Version.new("12") }
 
   # Runs cucumber from the fixture project; returns [stdout, stderr, status, results by full_name].
   def run_cucumber(*targets, extra_args: [], format_args: nil, mode: "formatter", extra_env: {}, out_dir: nil)
@@ -414,7 +417,8 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       it "writes no run.json and exits 0 (#{mode} mode)" do
         _out, stderr, status, = run_cucumber("features/login.feature", mode: mode, extra_args: ["--dry-run"])
 
-        expect(status.exitstatus).to eq(0), stderr
+        # Cucumber 12 fails a run with an undefined step even under --dry-run.
+        expect(status.exitstatus).to eq(cucumber12 ? 1 : 0), stderr
         expect(@last[:files]).to be_empty
       end
     end
@@ -576,6 +580,8 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   end
 
   describe "exec summary" do
+    def strict_args = cucumber12 ? [] : ["--strict"]
+
     def summary_of(feature = "features/login.feature", *args, extra_env: {})
       Dir.mktmpdir do |dir|
         path = File.join(dir, "summary.json")
@@ -585,11 +591,12 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
     end
 
     it "counts failed and ambiguous scenarios" do
-      expect(summary_of).to eq("framework_failures" => 2, "quarantined" => 0, "errors_outside_tests" => 0)
+      # Cucumber 12 is always strict, so pending and undefined count there too.
+      expect(summary_of).to eq("framework_failures" => cucumber12 ? 4 : 2, "quarantined" => 0, "errors_outside_tests" => 0)
     end
 
     it "also counts pending and undefined scenarios under --strict" do
-      expect(summary_of("features/login.feature", "--strict"))
+      expect(summary_of("features/login.feature", *strict_args))
         .to eq("framework_failures" => 4, "quarantined" => 0, "errors_outside_tests" => 0)
     end
 
@@ -600,8 +607,8 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
 
     it "counts a flaky scenario under --strict --retry, which fails cucumber's run" do
       Dir.mktmpdir do |dir|
-        expect(summary_of("features/retry.feature", "--strict", "--retry", "1", extra_env: attempt_env(dir)))
-          .to eq("framework_failures" => 2, "quarantined" => 0, "errors_outside_tests" => 0)
+        expect(summary_of("features/retry.feature", *strict_args, "--retry", "1", extra_env: attempt_env(dir)))
+          .to eq("framework_failures" => cucumber12 ? 1 : 2, "quarantined" => 0, "errors_outside_tests" => 0)
       end
     end
 
