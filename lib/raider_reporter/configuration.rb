@@ -5,6 +5,7 @@ require "raider_reporter/azure_env"
 module RaiderReporter
   class Configuration
     TRUTHY = %w[1 true].freeze
+    DEFAULT_MAX_VIDEO_BYTES = 50 * 1024 * 1024
 
     attr_accessor :token, :endpoint, :output_dir, :clean_output_dir, :html_report, :environment, :max_attachment_bytes,
                   :max_video_bytes, :quarantine, :exec_summary_path
@@ -17,7 +18,7 @@ module RaiderReporter
       @html_report = true
       @environment = {}
       @max_attachment_bytes = 5 * 1024 * 1024
-      @max_video_bytes = 50 * 1024 * 1024
+      @max_video_bytes = DEFAULT_MAX_VIDEO_BYTES
       @quarantine = TRUTHY.include?(AzureEnv.value(env, "RAIDER_QUARANTINE").to_s.downcase)
       @exec_summary_path = AzureEnv.value(env, "RAIDER_EXEC_SUMMARY")
     end

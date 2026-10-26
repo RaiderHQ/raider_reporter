@@ -8,7 +8,7 @@ require "set"
 module RaiderReporter
   # Accumulates one suite run. Framework formatters call it; writers read the Run it returns.
   class Collector
-    def initialize(max_attachment_bytes:, warn:, max_video_bytes: 50 * 1024 * 1024,
+    def initialize(max_attachment_bytes:, warn:, max_video_bytes: Configuration::DEFAULT_MAX_VIDEO_BYTES,
                    clock: -> { Time.now.utc }, uuid: -> { SecureRandom.uuid },
                    quarantine: -> { Quarantine::EMPTY })
       @max_attachment_bytes = max_attachment_bytes

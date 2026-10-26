@@ -120,7 +120,11 @@ end
 
 `attach` copies the file right away, so the attachment keeps the bytes the file had at that moment even if the same path is overwritten by a later example. Using a path per example (as above) still makes the files on disk easier to find.
 
-`attach` returns `true` on success. It returns `false` and prints a `[raider_reporter]` warning, never raising, if it is called outside a running example (for instance when the formatter is not loaded), if the file does not exist, or if the file is larger than 5 MB.
+`attach` returns `true` on success. It returns `false` and prints a `[raider_reporter]` warning, never raising, if it is called outside a running example (for instance when the formatter is not loaded), if the file does not exist, or if the file is larger than its size cap: 5 MB (`max_attachment_bytes`), or 50 MB for videos (`video/*`, `max_video_bytes`).
+
+Videos (`.webm`, `.mp4`) are attached the same way, for example `RaiderReporter.attach("video", path, type: :webm)`. In the local HTML report they play inline, with a download link.
+
+When a run is uploaded, screenshots and other non-video attachments are sent first; videos then fill the room left in the upload budget. A video that does not fit is skipped and later, smaller videos are still tried. The local `raider-results/attachments/` folder keeps every attachment that passed its size cap.
 
 ## Configuration
 
@@ -139,6 +143,8 @@ end
 | `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory (`run-<n>.json` and `attachments-<n>/` when sharded) inside `output_dir` before writing. Nothing else in `output_dir` is touched, except a raider_reporter-written `index.html`. |
 | `html_report` | `true` | Write `index.html`, the local HTML report, into `output_dir` after each run. See [Local report](#local-report). |
 | `quarantine` | `true` when `ENV["RAIDER_QUARANTINE"]` is `1` or `true` | Fetch the quarantine list at run start and report matching failures as `quarantined`. Needs `token` and `endpoint`. See [Quarantine](#quarantine). |
+| `max_attachment_bytes` | `5 MB` | Largest non-video attachment `attach` accepts. |
+| `max_video_bytes` | `50 MB` | Largest `video/*` attachment `attach` accepts. |
 | `environment` | `{}` | Free-form key/values stored with the run (browser, suite name, and so on). Values are JSON values: strings, booleans or numbers. |
 
 ## Local output
