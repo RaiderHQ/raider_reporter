@@ -145,6 +145,7 @@ end
 | `quarantine` | `true` when `ENV["RAIDER_QUARANTINE"]` is `1` or `true` | Fetch the quarantine list at run start and report matching failures as `quarantined`. Needs `token` and `endpoint`. See [Quarantine](#quarantine). |
 | `max_attachment_bytes` | `5 MB` | Largest non-video attachment `attach` accepts. |
 | `max_video_bytes` | `50 MB` | Largest `video/*` attachment `attach` accepts. |
+| `exec_summary_path` | `ENV["RAIDER_EXEC_SUMMARY"]` | File where the run writes its failure counts (framework failures, quarantined, errors outside tests) for `raider-reporter exec` to read when it decides the exit code. `exec` sets it for the command it runs; leave it unset otherwise. Nothing is written when it is unset. See [Quarantine](#quarantine). |
 | `environment` | `{}` | Free-form key/values stored with the run (browser, suite name, and so on). Values are JSON values: strings, booleans or numbers. |
 
 ## Local output
