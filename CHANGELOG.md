@@ -5,6 +5,7 @@
 - Video attachments play inline in the HTML report: `video/*` attachments render as a `<video controls>` player (metadata preloaded only) with a download link, instead of a plain link. Unsafe paths are still dropped
 - Videos get their own size cap, `config.max_video_bytes` (default 50 MB); the 5 MB `max_attachment_bytes` still applies to everything else. A video over its cap is skipped with a warning
 - Uploads keep non-video attachments (screenshots, logs) first; videos then fill whatever room is left in the upload budget. A video that does not fit is skipped and later, smaller ones are still tried
+- The Cucumber formatter works on Cucumber 12, which removed `config.strict`: it no longer logs `undefined method 'strict'` and keeps its failure counts (Cucumber 10 and 11 behave as before)
 - No breaking changes
 
 ## 0.9.0 — 2026-10-24

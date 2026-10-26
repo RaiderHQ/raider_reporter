@@ -620,4 +620,62 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       end
     end
   end
+
+  describe "strict configuration across cucumber versions" do
+    let(:cuke10_result) do
+      Struct.new(:ok, :strict_arg) do
+        def ok?(strict: :none)
+          self.strict_arg = strict
+          ok
+        end
+      end
+    end
+    # Cucumber 12 shaped: result.ok? takes no arguments.
+    let(:cuke12_result) { Struct.new(:ok) { def ok? = ok } }
+    let(:test_case) { Struct.new(:location, :name).new("features/a.feature:3", "A") }
+    let(:strict_set) { Struct.new(:flaky) { def strict?(type = nil) = type == :flaky ? flaky : false } }
+    let(:cuke10_config) { Struct.new(:strict) }
+    let(:cuke12_config) { Struct.new(:unused) }
+
+    def outcomes_for(config, results)
+      formatter = RaiderReporter::Cucumber::Formatter.allocate
+      formatter.instance_variable_set(:@config, config)
+      formatter.instance_variable_set(:@outcomes, {})
+      formatter.instance_variable_set(:@failed_before, {})
+      formatter.instance_variable_set(:@outcomes_broken, false)
+      results.each { |result| formatter.send(:count_outcome, test_case, result) }
+      [formatter.instance_variable_get(:@outcomes).values, formatter.instance_variable_get(:@outcomes_broken)]
+    end
+
+    it "fails a retried pass under strict flaky on a cucumber 10 shaped config" do
+      config = cuke10_config.new(strict_set.new(true))
+      expect(outcomes_for(config, [cuke10_result.new(false), cuke10_result.new(true)])).to eq([[true], false])
+      expect(outcomes_for(config, [cuke10_result.new(true)])).to eq([[false], false])
+      expect(outcomes_for(config, [cuke10_result.new(false)])).to eq([[true], false])
+    end
+
+    it "does not fail a retried pass without strict flaky on a cucumber 10 shaped config" do
+      config = cuke10_config.new(strict_set.new(false))
+      expect(outcomes_for(config, [cuke10_result.new(false), cuke10_result.new(true)])).to eq([[false], false])
+    end
+
+    it "passes the strict configuration to result.ok? on a cucumber 10 shaped config" do
+      strict = strict_set.new(false)
+      result = cuke10_result.new(true)
+      outcomes_for(cuke10_config.new(strict), [result])
+      expect(result.strict_arg).to equal(strict)
+    end
+
+    it "counts failures on a cucumber 12 shaped config with no strict method, without breaking" do
+      config = cuke12_config.new
+      expect(config).not_to respond_to(:strict)
+      expect(outcomes_for(config, [cuke12_result.new(false)])).to eq([[true], false])
+      expect(outcomes_for(config, [cuke12_result.new(true)])).to eq([[false], false])
+    end
+
+    it "never fails a retried pass on a cucumber 12 shaped config (flaky is always ok there)" do
+      results = [cuke12_result.new(false), cuke12_result.new(true)]
+      expect(outcomes_for(cuke12_config.new, results)).to eq([[false], false])
+    end
+  end
 end
