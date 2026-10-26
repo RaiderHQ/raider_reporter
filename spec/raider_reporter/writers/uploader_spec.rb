@@ -62,28 +62,49 @@ RSpec.describe RaiderReporter::Writers::Uploader do
     expect(warnings.first).to include("1 attachment")
   end
 
+  def typed_payload(dir, files)
+    results = files.each_with_index.map do |(name, type, bytes), i|
+      src = File.join(dir, name)
+      File.binwrite(src, "x" * bytes)
+      att = RaiderReporter::Attachment.new(name: name, source_path: src, content_type: type)
+      RaiderReporter::TestResult.new(identifier: "i#{i}", full_name: "n", file_path: "f", line_number: 1,
+                                     status: "failed", duration_ms: 1, attempts: 1, tags: [],
+                                     failure: nil, attachments: [att])
+    end
+    RaiderReporter::Payload.new(RaiderReporter::Run.new(client_run_id: "u", started_at: Time.now.utc,
+                                                         finished_at: Time.now.utc, ci: nil, git: nil,
+                                                         environment: {}, results: results, shard: nil))
+  end
+
   it "keeps screenshots ahead of an earlier video when the byte budget is exceeded" do
     stub_const("#{described_class}::MAX_UPLOAD_ATTACHMENT_BYTES", 7)
     stub_request(:post, url).to_return(status: 201, body: { run_id: 1, url: "u" }.to_json)
     warnings = []
     Dir.mktmpdir do |dir|
-      results = [["clip.webm", "video/webm", 5], ["shot.png", "image/png", 3]].each_with_index.map do |(name, type, bytes), i|
-        src = File.join(dir, name)
-        File.binwrite(src, "x" * bytes)
-        att = RaiderReporter::Attachment.new(name: name, source_path: src, content_type: type)
-        RaiderReporter::TestResult.new(identifier: "i#{i}", full_name: "n", file_path: "f", line_number: 1,
-                                       status: "failed", duration_ms: 1, attempts: 1, tags: [],
-                                       failure: nil, attachments: [att])
-      end
-      run = RaiderReporter::Run.new(client_run_id: "u", started_at: Time.now.utc, finished_at: Time.now.utc,
-                                    ci: nil, git: nil, environment: {}, results: results, shard: nil)
-      described_class.new(config, warn: ->(m) { warnings << m }).upload(RaiderReporter::Payload.new(run))
+      files = [["clip.webm", "video/webm", 5], ["shot.png", "image/png", 3]]
+      described_class.new(config, warn: ->(m) { warnings << m }).upload(typed_payload(dir, files))
     end
     json, body = uploaded_payload_json
     expect(json["results"].map { |r| r["attachments"].size }).to eq([0, 1])
     expect(body).to include("shot.png")
     expect(body).not_to include("clip.webm")
     expect(warnings.join).to include("not uploading 1 attachment")
+  end
+
+  it "skips a video that does not fit and keeps a later smaller video" do
+    stub_const("#{described_class}::MAX_UPLOAD_ATTACHMENT_BYTES", 7)
+    stub_request(:post, url).to_return(status: 201, body: { run_id: 1, url: "u" }.to_json)
+    warnings = []
+    Dir.mktmpdir do |dir|
+      files = [["big.webm", "video/webm", 20], ["small.webm", "video/webm", 3]]
+      described_class.new(config, warn: ->(m) { warnings << m }).upload(typed_payload(dir, files))
+    end
+    json, body = uploaded_payload_json
+    expect(json["results"].map { |r| r["attachments"].size }).to eq([0, 1])
+    expect(body).to include("small.webm")
+    expect(body).not_to include("big.webm")
+    expect(warnings.size).to eq(1)
+    expect(warnings.first).to include("1 attachment")
   end
 
   it "drops attachments beyond the part count limit from the upload" do

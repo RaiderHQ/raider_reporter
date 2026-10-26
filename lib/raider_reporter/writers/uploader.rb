@@ -68,18 +68,37 @@ module RaiderReporter
         end))
       end
 
-      # Identity-keyed set of the attachments to upload, in priority order.
+      # Identity-keyed set of the attachments to upload. Non-videos come first
+      # and stop at the first byte overflow; videos then fill the room left,
+      # a video that does not fit is skipped and later ones are still tried.
       def budgeted(entries)
-        ordered = entries.partition { |entry| !entry[:attachment].content_type.to_s.start_with?("video/") }.flatten
-        bytes = 0
+        videos, others = entries.partition { |entry| video?(entry[:attachment]) }
         keep = {}.compare_by_identity
-        ordered.first(MAX_UPLOAD_ATTACHMENTS).each do |entry|
-          bytes += File.size?(entry[:attachment].source_path).to_i
-          break if bytes > MAX_UPLOAD_ATTACHMENT_BYTES
+        bytes = 0
+        others.each do |entry|
+          bytes += size_of(entry)
+          break if bytes > MAX_UPLOAD_ATTACHMENT_BYTES || keep.size >= MAX_UPLOAD_ATTACHMENTS
 
           keep[entry[:attachment]] = true
         end
+        videos.each do |entry|
+          break if keep.size >= MAX_UPLOAD_ATTACHMENTS
+
+          size = size_of(entry)
+          next if bytes + size > MAX_UPLOAD_ATTACHMENT_BYTES
+
+          bytes += size
+          keep[entry[:attachment]] = true
+        end
         keep
+      end
+
+      def video?(attachment)
+        attachment.content_type.to_s.start_with?("video/")
+      end
+
+      def size_of(entry)
+        File.size?(entry[:attachment].source_path).to_i
       end
 
       def add_field(body, boundary, name, value)
