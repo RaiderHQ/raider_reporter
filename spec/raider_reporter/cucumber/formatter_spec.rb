@@ -287,7 +287,7 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
         { "RUBYOPT" => nil, "RUBYLIB" => nil }, RbConfig.ruby, "--disable-gems", "-I", lib_dir, "-e", 'require "raider_reporter/cucumber"'
       )
       expect(status.success?).to be(false)
-      expect(output).to include("raider_reporter/cucumber needs the cucumber gem (>= 9, < 12)")
+      expect(output).to include("raider_reporter/cucumber needs the cucumber gem (>= 9, < 13)")
     end
 
     it "re-raises an unrelated LoadError even if its message mentions cucumber" do

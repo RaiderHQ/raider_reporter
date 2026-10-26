@@ -30,7 +30,7 @@ Run `bundle exec rspec` as usual. (For Cucumber, see [Cucumber](#cucumber).) Res
 
 ## Cucumber
 
-Requirements: Cucumber 9, 10 or 11 in your own Gemfile (`gem "cucumber"`). It is not a dependency of this gem; requiring `raider_reporter/cucumber` without Cucumber raises a `LoadError` that says so. Cucumber 9.2.1 on Ruby 4 also needs `gem "logger"` in your Gemfile, because Cucumber requires it without declaring it.
+Requirements: Cucumber 9, 10, 11 or 12 (12 needs Ruby 3.3+) in your own Gemfile (`gem "cucumber"`). It is not a dependency of this gem; requiring `raider_reporter/cucumber` without Cucumber raises a `LoadError` that says so. Cucumber 9.2.1 on Ruby 4 also needs `gem "logger"` in your Gemfile, because Cucumber requires it without declaring it.
 
 ### Plugin mode (recommended)
 
