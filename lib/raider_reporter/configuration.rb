@@ -7,7 +7,7 @@ module RaiderReporter
     TRUTHY = %w[1 true].freeze
 
     attr_accessor :token, :endpoint, :output_dir, :clean_output_dir, :html_report, :environment, :max_attachment_bytes,
-                  :quarantine, :exec_summary_path
+                  :max_video_bytes, :quarantine, :exec_summary_path
 
     def initialize(env = ENV)
       @token = AzureEnv.value(env, "RAIDER_TOKEN")
@@ -17,6 +17,7 @@ module RaiderReporter
       @html_report = true
       @environment = {}
       @max_attachment_bytes = 5 * 1024 * 1024
+      @max_video_bytes = 50 * 1024 * 1024
       @quarantine = TRUTHY.include?(AzureEnv.value(env, "RAIDER_QUARANTINE").to_s.downcase)
       @exec_summary_path = AzureEnv.value(env, "RAIDER_EXEC_SUMMARY")
     end
