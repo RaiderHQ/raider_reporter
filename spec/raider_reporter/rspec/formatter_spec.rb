@@ -57,6 +57,17 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
     end
   end
 
+  it "writes in-project backtrace frames project-relative" do
+    Dir.mktmpdir do |dir|
+      run_suite(dir)
+      results = JSON.parse(File.read(File.join(dir, "raider-results", "run.json")))["results"].sort_by { |r| r["line_number"] }
+      backtrace = results[1]["failure"]["backtrace"]
+
+      expect(backtrace).to include(a_string_matching(/\Asample_spec\.rb:\d+/))
+      expect(backtrace).not_to include(a_string_starting_with(dir))
+    end
+  end
+
   it "still reports the failure when AppFrame.from raises" do
     Dir.mktmpdir do |dir|
       boom = File.join(dir, "boom.rb")

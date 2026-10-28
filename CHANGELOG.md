@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Backtrace frames inside the project are written project-relative (`spec/login_spec.rb:12:in ...`); gem, stdlib and `vendor/` frames are unchanged
+
 ## 0.10.0 — 2026-10-26
 
 - Video attachments play inline in the HTML report: `video/*` attachments render as a `<video controls>` player (metadata preloaded only) with a download link, instead of a plain link. Unsafe paths are still dropped

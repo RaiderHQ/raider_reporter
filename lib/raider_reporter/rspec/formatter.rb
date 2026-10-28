@@ -91,6 +91,7 @@ module RaiderReporter
         return nil unless exception
 
         backtrace = ::RSpec.configuration.backtrace_formatter.format_backtrace(exception.backtrace || [])
+        backtrace = relativize(backtrace)
         Failure.new(
           message: utf8(exception.message)[0, MAX_MESSAGE],
           exception_class: utf8(exception.class.name),
@@ -106,6 +107,12 @@ module RaiderReporter
         return nil unless exception.respond_to?(:all_exceptions)
 
         exception.all_exceptions.first&.backtrace
+      end
+
+      def relativize(backtrace)
+        AppFrame.relativize(backtrace, root: RaiderReporter.project_root || Dir.pwd)
+      rescue StandardError
+        backtrace
       end
 
       def app_frame_for(exception)
