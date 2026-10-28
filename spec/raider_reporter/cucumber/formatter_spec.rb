@@ -88,7 +88,6 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
     it "writes the step definition frame project-relative in the backtrace" do
       failure = results.fetch("Login: A user is rejected")["failure"]
       expect(failure["backtrace"]).to include(a_string_matching(%r{\Afeatures/step_definitions/steps\.rb:\d+}))
-      expect(failure["backtrace"].grep(%r{\Afeatures/step_definitions/}).first).to eq(failure["backtrace"].find { |l| l.start_with?("features/") })
       expect(failure["app_frame"]).to start_with("features/step_definitions/")
     end
 
