@@ -124,6 +124,11 @@ RSpec.describe RaiderReporter::AppFrame do
       end
     end
 
+    it "relativizes other lines when one line has invalid UTF-8" do
+      bad = "/tmp/\xFF/bad.rb:1:in 'x'".dup.force_encoding("UTF-8")
+      expect(relativize([bad, page_line])).to eq([bad, page_frame])
+    end
+
     it "returns [] for nil or empty input and the input for a nil root" do
       expect(relativize(nil)).to eq([])
       expect(relativize([])).to eq([])

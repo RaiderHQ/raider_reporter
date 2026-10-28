@@ -32,9 +32,11 @@ module RaiderReporter
       base = "#{File.expand_path(root.to_s).chomp("/")}/"
       excluded = excluded_prefixes
       Array(backtrace).map do |line|
-        text = line.to_s
+        text = line.to_s.scrub
         relative = relative_path(text, base, excluded)
         relative ? "#{relative}#{text[text[/\A(.+?):\d+/, 1].length..]}" : line
+      rescue StandardError
+        line
       end
     end
 
