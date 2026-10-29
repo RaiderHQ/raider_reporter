@@ -288,6 +288,19 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
       end
     end
 
+    it "still emits finished for every example when recording it raises" do
+      Dir.mktmpdir do |dir|
+        boom = File.join(dir, "boom.rb")
+        File.write(boom, <<~RUBY)
+          require "raider_reporter"
+          RaiderReporter::Collector.prepend(Module.new { def finish_test(**) = raise("boom in finish_test") })
+        RUBY
+        events = run_with_events(dir, "--require", boom)
+        expect(events.count { |e| e["type"] == "finished" }).to eq(6)
+        expect(events.last["type"]).to eq("done")
+      end
+    end
+
     it "reports a retried example once with its attempts" do
       Dir.mktmpdir do |dir|
         events = run_with_events(dir)

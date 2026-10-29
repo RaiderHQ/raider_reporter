@@ -10,13 +10,15 @@ module RaiderReporter
   # when RAIDER_EVENTS_DIR is set. A write error switches it off after one warning.
   class EventStream
     VERSION = 1
+    # Owner-only, and never through a symlink someone planted in the events dir.
+    OPEN_FLAGS = File::WRONLY | File::APPEND | File::CREAT | (defined?(File::NOFOLLOW) ? File::NOFOLLOW : 0)
 
     def self.open(warn:, env: ENV, shard: ShardDetector.new.shard)
       dir = env["RAIDER_EVENTS_DIR"].to_s
       return nil if dir.empty?
 
       FileUtils.mkdir_p(dir)
-      file = File.open(File.join(dir, "worker-#{shard ? shard["index"] : 1}.ndjson"), "a")
+      file = File.open(File.join(dir, "worker-#{shard ? shard["index"] : 1}.ndjson"), OPEN_FLAGS, 0o600)
       file.sync = true
       new(file, warn: warn)
     rescue StandardError => e

@@ -53,6 +53,26 @@ RSpec.describe RaiderReporter::EventStream do
     end
   end
 
+  it "creates the file owner-only" do
+    Dir.mktmpdir do |dir|
+      described_class.open(env: { "RAIDER_EVENTS_DIR" => dir }, shard: nil, warn: warn_fn).close
+      expect(File.stat(File.join(dir, "worker-1.ndjson")).mode & 0o777).to eq(0o600)
+    end
+  end
+
+  it "refuses a symlinked events file, switching the stream off with a warning" do
+    skip "no O_NOFOLLOW" unless defined?(File::NOFOLLOW)
+    Dir.mktmpdir do |dir|
+      target = File.join(dir, "elsewhere.txt")
+      File.write(target, "")
+      File.symlink(target, File.join(dir, "worker-1.ndjson"))
+      expect(described_class.open(env: { "RAIDER_EVENTS_DIR" => dir }, shard: nil, warn: warn_fn)).to be_nil
+      expect(warnings.size).to eq(1)
+      expect(warnings[0]).to start_with("events stream disabled:")
+      expect(File.read(target)).to eq("")
+    end
+  end
+
   it "stops writing after an IO error and warns once" do
     Dir.mktmpdir do |dir|
       file = File.open(File.join(dir, "x.ndjson"), "a")

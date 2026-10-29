@@ -74,19 +74,23 @@ module RaiderReporter
         status = "quarantined" if status == "failed" && @collector.quarantined?(file_path, full_name)
         attempts = metadata.fetch(:retry_attempts, 0).to_i + 1
         duration_ms = ((execution.run_time || 0) * 1000).round
-        @collector.finish_test(
-          identifier: example.id,
-          full_name: full_name,
-          file_path: file_path,
-          line_number: metadata[:line_number],
-          status: status,
-          duration_ms: duration_ms,
-          attempts: attempts,
-          tags: metadata.select { |key, value| value == true && !NON_TAG_KEYS.include?(key) }.keys.map(&:to_s).sort,
-          failure: failure
-        )
-        RaiderReporter.event_stream&.finished(id: example.id, status: status, duration_ms: duration_ms,
-                                              attempts: attempts)
+        begin
+          @collector.finish_test(
+            identifier: example.id,
+            full_name: full_name,
+            file_path: file_path,
+            line_number: metadata[:line_number],
+            status: status,
+            duration_ms: duration_ms,
+            attempts: attempts,
+            tags: metadata.select { |key, value| value == true && !NON_TAG_KEYS.include?(key) }.keys.map(&:to_s).sort,
+            failure: failure
+          )
+        ensure
+          # Even if recording failed: the desktop app must still see the example end
+          RaiderReporter.event_stream&.finished(id: example.id, status: status, duration_ms: duration_ms,
+                                                attempts: attempts)
+        end
       end
 
       # The examples this run will execute (after tag/line filters), in run order.

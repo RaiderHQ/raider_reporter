@@ -407,6 +407,13 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       expect(events.last["type"]).to eq("done")
     end
 
+    it "still emits finished for every attempt when building the result raises" do
+      events = run_with_events("features/login.feature", extra_env_more: { "RAIDER_FIXTURE_BOOM" => "1" })
+      started = events.count { |e| e["type"] == "started" }
+      expect(started).to be > 0
+      expect(events.count { |e| e["type"] == "finished" }).to eq(started)
+    end
+
     it "writes nothing when RAIDER_EVENTS_DIR is unset" do
       Dir.mktmpdir do |dir|
         run_cucumber("features/login.feature", extra_env: { "RAIDER_EVENTS_DIR" => nil }, out_dir: dir)

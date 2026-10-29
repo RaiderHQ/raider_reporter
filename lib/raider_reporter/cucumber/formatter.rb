@@ -135,12 +135,16 @@ module RaiderReporter
         status = "quarantined" if status == "failed" && quarantined?(fields)
         key = "#{test_case.location}|#{test_case.name}"
         @attempts[key] += 1
-        # The newest attempt replaces the older one, taking its attachments with it.
-        @buffer[key] = @collector.build_test(
-          **fields, status: status, duration_ms: duration_ms(result), attempts: @attempts[key], failure: failure
-        )
-        RaiderReporter.event_stream&.finished(id: fields[:identifier], status: status, duration_ms: duration_ms(result),
-                                              attempts: @attempts[key])
+        begin
+          # The newest attempt replaces the older one, taking its attachments with it.
+          @buffer[key] = @collector.build_test(
+            **fields, status: status, duration_ms: duration_ms(result), attempts: @attempts[key], failure: failure
+          )
+        ensure
+          # Even if building the result failed: the desktop app must still see the attempt end
+          RaiderReporter.event_stream&.finished(id: fields[:identifier], status: status,
+                                                duration_ms: duration_ms(result), attempts: @attempts[key])
+        end
       end
 
       def run_finished
