@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch: # run from a branch: rake release tags (if needed) and pushes the gem
   release:
     types: [published]
   push:
