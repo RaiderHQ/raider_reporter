@@ -1,12 +1,9 @@
 # Changelog
 
-## Unreleased
-
-- Backtrace frames inside the project are written project-relative (`spec/login_spec.rb:12:in ...`); gem, stdlib and `vendor/` frames are unchanged
-
 ## 0.11.0 — 2026-10-29
 
-- Live events: when `RAIDER_EVENTS_DIR` is set, the RSpec formatter appends NDJSON lines (`plan`, `started`, `finished`, `done`, each with `"v":1`) to `<dir>/worker-<n>.ndjson`, where `n` is the shard index (1 without a shard). The Raider desktop app tails them during a run. With the variable unset, nothing changes. A write error switches the stream off after one warning and never fails the suite
+- Live events: when `RAIDER_EVENTS_DIR` is set, the RSpec formatter and the Cucumber formatter/plugin append NDJSON lines (`plan`, `started`, `finished`, `done`, each with `"v":1`) to `<dir>/worker-<n>.ndjson`, where `n` is the shard index (1 without a shard). Cucumber writes `started` and `finished` once per attempt under `--retry`. The Raider desktop app tails them during a run. With the variable unset, nothing changes. A write error switches the stream off after one warning and never fails the suite
+- Backtrace frames inside the project are written project-relative (`spec/login_spec.rb:12:in ...`); gem, stdlib and `vendor/` frames are unchanged
 - No breaking changes
 
 ## 0.10.0 — 2026-10-26

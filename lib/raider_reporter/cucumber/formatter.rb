@@ -148,8 +148,9 @@ module RaiderReporter
         @buffer.clear
         safely(nil) { record_framework_counts }
         RaiderReporter.finish!($stderr)
-        finish_events
       ensure
+        # Even if finish! raised, so the desktop app sees the stream end
+        safely(nil) { finish_events }
         self.class.release(@config)
       end
 

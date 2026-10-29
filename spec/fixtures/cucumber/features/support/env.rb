@@ -57,3 +57,7 @@ end
 if ENV["FIXTURE_BREAK_RUNTIME_ATTACH"]
   Cucumber::Runtime::UserInterface.prepend(Module.new { def attach(*) = raise("cucumber attach exploded") })
 end
+
+if ENV["FIXTURE_BREAK_FINISH"]
+  RaiderReporter.singleton_class.prepend(Module.new { def finish!(*) = raise("finish exploded") })
+end

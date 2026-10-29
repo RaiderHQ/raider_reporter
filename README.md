@@ -128,7 +128,7 @@ When a run is uploaded, screenshots and other non-video attachments are sent fir
 
 ## Live events
 
-Set `RAIDER_EVENTS_DIR` and the RSpec formatter appends one JSON line per event to `<dir>/worker-<n>.ndjson` (`n` is the shard index, or 1): `plan` (the examples that will run), `started`, `finished` (status, duration, attempts) and `done`. Raider desktop tails these files for live results. Unset, nothing is written; a write error turns the stream off with one warning.
+Set `RAIDER_EVENTS_DIR` and the RSpec formatter, or the Cucumber formatter/plugin, appends one JSON line per event to `<dir>/worker-<n>.ndjson` (`n` is the shard index, or 1): `plan` (the examples that will run), `started`, `finished` (status, duration, attempts; Cucumber writes one `started`/`finished` pair per `--retry` attempt) and `done`. Raider desktop tails these files for live results. Unset, nothing is written; a write error turns the stream off with one warning.
 
 ## Configuration
 

@@ -364,10 +364,11 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       File.readlines(File.join(events_dir, "worker-1.ndjson")).map { |line| JSON.parse(line) }
     end
 
-    def run_with_events(*targets, **opts)
+    def run_with_events(*targets, extra_env_more: {}, **opts)
       Dir.mktmpdir do |dir|
         events_dir = File.join(dir, "events")
-        run_cucumber(*targets, extra_env: attempt_env(dir).merge("RAIDER_EVENTS_DIR" => events_dir), **opts)
+        env = attempt_env(dir).merge("RAIDER_EVENTS_DIR" => events_dir).merge(extra_env_more)
+        run_cucumber(*targets, extra_env: env, **opts)
         return events_in(events_dir)
       end
     end
@@ -398,6 +399,12 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       events = run_with_events("features/login.feature")
       expect(events.last["type"]).to eq("done")
       expect(events.count { |e| e["type"] == "done" }).to eq(1)
+    end
+
+    it "still ends with done when finishing the run raises" do
+      events = run_with_events("features/login.feature", extra_env_more: { "FIXTURE_BREAK_FINISH" => "1" })
+      expect(@last[:stderr]).to include("finish exploded")
+      expect(events.last["type"]).to eq("done")
     end
 
     it "writes nothing when RAIDER_EVENTS_DIR is unset" do
