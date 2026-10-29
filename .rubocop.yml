@@ -1,0 +1,27 @@
+# Security linting only. Style cops are intentionally off.
+AllCops:
+  DisabledByDefault: true
+  TargetRubyVersion: 3.2
+  NewCops: disable
+  SuggestExtensions: false
+
+Security/Open:
+  Enabled: true
+
+Security/Eval:
+  Enabled: true
+
+Security/YAMLLoad:
+  Enabled: true
+
+Security/MarshalLoad:
+  Enabled: true
+
+Security/JSONLoad:
+  Enabled: true
+
+Security/IoMethods:
+  Enabled: true
+
+Security/CompoundHash:
+  Enabled: true
