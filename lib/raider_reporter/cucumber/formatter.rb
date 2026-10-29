@@ -160,13 +160,30 @@ module RaiderReporter
         return if @outcomes_broken
 
         key = "#{test_case.location}|#{test_case.name}"
-        failed = !result.ok?(strict: @config.strict)
-        flaky = !failed && @failed_before[key] && @config.strict.strict?(:flaky)
+        failed = !result_ok?(result)
+        flaky = !failed && @failed_before[key] && strict_flaky?
         @failed_before[key] ||= failed
         @outcomes[key] = failed || flaky ? true : false
       rescue StandardError => e
         @outcomes_broken = true
         RaiderReporter.warn("#{e.class}: #{e.message}")
+      end
+
+      # Cucumber 10 and 11 carry a strict configuration (config.strict) that result.ok?
+      # takes as a keyword. Cucumber 12 removed it: result.ok? takes nothing, pending and
+      # undefined always fail, and a flaky scenario never does. Detect, never compare versions.
+      def strict_configuration
+        @config.strict if @config.respond_to?(:strict)
+      end
+
+      def result_ok?(result)
+        strict = strict_configuration
+        strict ? result.ok?(strict: strict) : result.ok?
+      end
+
+      def strict_flaky?
+        strict = strict_configuration
+        strict ? strict.strict?(:flaky) : false
       end
 
       # Scenarios that make cucumber's run fail; one error outside tests when the run

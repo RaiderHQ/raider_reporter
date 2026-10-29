@@ -9,6 +9,9 @@ require_relative "../../support/fake_raider"
 RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   let(:lib_dir) { File.expand_path("../../../lib", __dir__) }
   let(:fixture_dir) { File.expand_path("../../fixtures/cucumber", __dir__) }
+  # Cucumber 12 dropped the strict configuration: no --strict flags, and pending and
+  # undefined always fail the run. Specs only; the formatter detects by capability.
+  let(:cucumber12) { Gem.loaded_specs.fetch("cucumber").version >= Gem::Version.new("12") }
 
   # Runs cucumber from the fixture project; returns [stdout, stderr, status, results by full_name].
   def run_cucumber(*targets, extra_args: [], format_args: nil, mode: "formatter", extra_env: {}, out_dir: nil)
@@ -284,7 +287,7 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
         { "RUBYOPT" => nil, "RUBYLIB" => nil }, RbConfig.ruby, "--disable-gems", "-I", lib_dir, "-e", 'require "raider_reporter/cucumber"'
       )
       expect(status.success?).to be(false)
-      expect(output).to include("raider_reporter/cucumber needs the cucumber gem (>= 9, < 12)")
+      expect(output).to include("raider_reporter/cucumber needs the cucumber gem (>= 9, < 13)")
     end
 
     it "re-raises an unrelated LoadError even if its message mentions cucumber" do
@@ -414,7 +417,8 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       it "writes no run.json and exits 0 (#{mode} mode)" do
         _out, stderr, status, = run_cucumber("features/login.feature", mode: mode, extra_args: ["--dry-run"])
 
-        expect(status.exitstatus).to eq(0), stderr
+        # Cucumber 12 fails a run with an undefined step even under --dry-run.
+        expect(status.exitstatus).to eq(cucumber12 ? 1 : 0), stderr
         expect(@last[:files]).to be_empty
       end
     end
@@ -576,6 +580,8 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
   end
 
   describe "exec summary" do
+    def strict_args = cucumber12 ? [] : ["--strict"]
+
     def summary_of(feature = "features/login.feature", *args, extra_env: {})
       Dir.mktmpdir do |dir|
         path = File.join(dir, "summary.json")
@@ -585,11 +591,12 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
     end
 
     it "counts failed and ambiguous scenarios" do
-      expect(summary_of).to eq("framework_failures" => 2, "quarantined" => 0, "errors_outside_tests" => 0)
+      # Cucumber 12 is always strict, so pending and undefined count there too.
+      expect(summary_of).to eq("framework_failures" => cucumber12 ? 4 : 2, "quarantined" => 0, "errors_outside_tests" => 0)
     end
 
     it "also counts pending and undefined scenarios under --strict" do
-      expect(summary_of("features/login.feature", "--strict"))
+      expect(summary_of("features/login.feature", *strict_args))
         .to eq("framework_failures" => 4, "quarantined" => 0, "errors_outside_tests" => 0)
     end
 
@@ -600,8 +607,8 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
 
     it "counts a flaky scenario under --strict --retry, which fails cucumber's run" do
       Dir.mktmpdir do |dir|
-        expect(summary_of("features/retry.feature", "--strict", "--retry", "1", extra_env: attempt_env(dir)))
-          .to eq("framework_failures" => 2, "quarantined" => 0, "errors_outside_tests" => 0)
+        expect(summary_of("features/retry.feature", *strict_args, "--retry", "1", extra_env: attempt_env(dir)))
+          .to eq("framework_failures" => cucumber12 ? 1 : 2, "quarantined" => 0, "errors_outside_tests" => 0)
       end
     end
 
@@ -618,6 +625,64 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
         expect(summary_of("features/quarantine.feature", extra_env: env))
           .to eq("framework_failures" => 1, "quarantined" => 1, "errors_outside_tests" => 0)
       end
+    end
+  end
+
+  describe "strict configuration across cucumber versions" do
+    let(:cuke10_result) do
+      Struct.new(:ok, :strict_arg) do
+        def ok?(strict: :none)
+          self.strict_arg = strict
+          ok
+        end
+      end
+    end
+    # Cucumber 12 shaped: result.ok? takes no arguments.
+    let(:cuke12_result) { Struct.new(:ok) { def ok? = ok } }
+    let(:test_case) { Struct.new(:location, :name).new("features/a.feature:3", "A") }
+    let(:strict_set) { Struct.new(:flaky) { def strict?(type = nil) = type == :flaky ? flaky : false } }
+    let(:cuke10_config) { Struct.new(:strict) }
+    let(:cuke12_config) { Struct.new(:unused) }
+
+    def outcomes_for(config, results)
+      formatter = RaiderReporter::Cucumber::Formatter.allocate
+      formatter.instance_variable_set(:@config, config)
+      formatter.instance_variable_set(:@outcomes, {})
+      formatter.instance_variable_set(:@failed_before, {})
+      formatter.instance_variable_set(:@outcomes_broken, false)
+      results.each { |result| formatter.send(:count_outcome, test_case, result) }
+      [formatter.instance_variable_get(:@outcomes).values, formatter.instance_variable_get(:@outcomes_broken)]
+    end
+
+    it "fails a retried pass under strict flaky on a cucumber 10 shaped config" do
+      config = cuke10_config.new(strict_set.new(true))
+      expect(outcomes_for(config, [cuke10_result.new(false), cuke10_result.new(true)])).to eq([[true], false])
+      expect(outcomes_for(config, [cuke10_result.new(true)])).to eq([[false], false])
+      expect(outcomes_for(config, [cuke10_result.new(false)])).to eq([[true], false])
+    end
+
+    it "does not fail a retried pass without strict flaky on a cucumber 10 shaped config" do
+      config = cuke10_config.new(strict_set.new(false))
+      expect(outcomes_for(config, [cuke10_result.new(false), cuke10_result.new(true)])).to eq([[false], false])
+    end
+
+    it "passes the strict configuration to result.ok? on a cucumber 10 shaped config" do
+      strict = strict_set.new(false)
+      result = cuke10_result.new(true)
+      outcomes_for(cuke10_config.new(strict), [result])
+      expect(result.strict_arg).to equal(strict)
+    end
+
+    it "counts failures on a cucumber 12 shaped config with no strict method, without breaking" do
+      config = cuke12_config.new
+      expect(config).not_to respond_to(:strict)
+      expect(outcomes_for(config, [cuke12_result.new(false)])).to eq([[true], false])
+      expect(outcomes_for(config, [cuke12_result.new(true)])).to eq([[false], false])
+    end
+
+    it "never fails a retried pass on a cucumber 12 shaped config (flaky is always ok there)" do
+      results = [cuke12_result.new(false), cuke12_result.new(true)]
+      expect(outcomes_for(cuke12_config.new, results)).to eq([[false], false])
     end
   end
 end

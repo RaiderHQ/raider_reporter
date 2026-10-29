@@ -8,9 +8,11 @@ require "set"
 module RaiderReporter
   # Accumulates one suite run. Framework formatters call it; writers read the Run it returns.
   class Collector
-    def initialize(max_attachment_bytes:, warn:, clock: -> { Time.now.utc }, uuid: -> { SecureRandom.uuid },
+    def initialize(max_attachment_bytes:, warn:, max_video_bytes: Configuration::DEFAULT_MAX_VIDEO_BYTES,
+                   clock: -> { Time.now.utc }, uuid: -> { SecureRandom.uuid },
                    quarantine: -> { Quarantine::EMPTY })
       @max_attachment_bytes = max_attachment_bytes
+      @max_video_bytes = max_video_bytes
       @warn = warn
       @clock = clock
       @uuid = uuid
@@ -118,8 +120,9 @@ module RaiderReporter
         @warn.call("attachment #{path} no longer exists; skipped")
         return false
       end
-      if File.size(path) > @max_attachment_bytes
-        @warn.call("attachment #{path} is larger than #{@max_attachment_bytes} bytes; skipped")
+      limit = attachment.content_type.to_s.start_with?("video/") ? @max_video_bytes : @max_attachment_bytes
+      if File.size(path) > limit
+        @warn.call("attachment #{path} is larger than #{limit} bytes; skipped")
         return false
       end
       true
