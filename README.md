@@ -126,6 +126,10 @@ Videos (`.webm`, `.mp4`) are attached the same way, for example `RaiderReporter.
 
 When a run is uploaded, screenshots and other non-video attachments are sent first; videos then fill the room left in the upload budget. A video that does not fit is skipped and later, smaller videos are still tried. The local `raider-results/attachments/` folder keeps every attachment that passed its size cap.
 
+## Live events
+
+Set `RAIDER_EVENTS_DIR` and the RSpec formatter appends one JSON line per event to `<dir>/worker-<n>.ndjson` (`n` is the shard index, or 1): `plan` (the examples that will run), `started`, `finished` (status, duration, attempts) and `done`. Raider desktop tails these files for live results. Unset, nothing is written; a write error turns the stream off with one warning.
+
 ## Configuration
 
 ```ruby

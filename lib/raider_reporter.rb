@@ -16,6 +16,7 @@ require_relative "raider_reporter/writers/local"
 require_relative "raider_reporter/writers/html"
 require_relative "raider_reporter/ci_detector"
 require_relative "raider_reporter/shard_detector"
+require_relative "raider_reporter/event_stream"
 require_relative "raider_reporter/writers/uploader"
 require_relative "raider_reporter/comment/summary_client"
 require_relative "raider_reporter/comment/github_client"
@@ -23,7 +24,7 @@ require_relative "raider_reporter/comment/azure_client"
 
 module RaiderReporter
   class << self
-    attr_reader :collector, :project_root
+    attr_reader :collector, :project_root, :event_stream
 
     def configuration
       @configuration ||= Configuration.new
@@ -39,6 +40,8 @@ module RaiderReporter
     def reset!
       @dry_run = false
       @collector&.cleanup
+      @event_stream&.close
+      @event_stream = nil
       @configuration = nil
       @collector = nil
       @project_root = nil
@@ -48,6 +51,8 @@ module RaiderReporter
     def start_collector!
       @dry_run = false
       @project_root = Dir.pwd
+      @event_stream&.close
+      @event_stream = EventStream.open(warn: ->(message) { warn(message) })
       @collector = Collector.new(
         max_attachment_bytes: configuration.max_attachment_bytes,
         max_video_bytes: configuration.max_video_bytes,
