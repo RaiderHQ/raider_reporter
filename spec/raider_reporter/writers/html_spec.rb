@@ -132,6 +132,20 @@ RSpec.describe RaiderReporter::Writers::Html do
     expect(html).not_to include("secret.txt", "/etc/passwd")
   end
 
+  it "renders videos as an inline player with a download link and drops unsafe video paths" do
+    attachments = [
+      { "name" => "video", "content_type" => "video/webm", "path" => "attachments/a b/clip.webm" },
+      { "name" => "evil", "content_type" => "video/mp4", "path" => "../x.mp4" }
+    ]
+    write_run("run.json", [result("vid", "failed", "attachments" => attachments)])
+
+    described_class.new.write(dir)
+
+    expect(html).to include(%(<video controls preload="metadata" src="attachments/a%20b/clip.webm"></video>))
+    expect(html).to include(%(<a href="attachments/a%20b/clip.webm" download>video</a>))
+    expect(html).not_to include("x.mp4")
+  end
+
   it "leaves out empty sections and renders a run with no results" do
     write_run("run.json", [])
 

@@ -65,7 +65,7 @@ Rules:
 - `attempts` defaults to 1; read from `rspec-retry` metadata when present (RSpec) or counted from Cucumber's `--retry` attempts.
 - Test identity: `test_key = SHA256("#{file_path}\0#{full_name}")`, computed by
   the server. `identifier` is stored for display only (it changes on reorder).
-- Limits: 50 MB per request, 5 MB per attachment.
+- Limits: 50 MB per request; 5 MB per non-video attachment and 50 MB per `video/*` attachment. The reporter keeps an upload under 45 MB of attachments and 1000 files, non-video attachments first and videos in the room left.
 
 Responses:
 

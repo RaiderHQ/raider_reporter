@@ -50,6 +50,7 @@ module RaiderReporter
       @project_root = Dir.pwd
       @collector = Collector.new(
         max_attachment_bytes: configuration.max_attachment_bytes,
+        max_video_bytes: configuration.max_video_bytes,
         warn: ->(message) { warn(message) },
         quarantine: -> { quarantined_keys }
       )
@@ -70,14 +71,15 @@ module RaiderReporter
         return false
       end
 
-      limit = configuration.max_attachment_bytes
+      content_type = ContentTypes.resolve(type, path)
+      limit = attachment_limit(content_type)
       if File.size(path.to_s) > limit
         warn("attach(#{name.inspect}): file #{path} is larger than #{limit} bytes; ignored")
         return false
       end
 
       collector.attach(Attachment.new(name: name.to_s, source_path: collector.stage(path.to_s),
-                                      content_type: ContentTypes.resolve(type, path)))
+                                      content_type: content_type))
     rescue StandardError => e
       warn("attach(#{name.inspect}) failed: #{e.class}: #{e.message}")
       false
@@ -118,6 +120,10 @@ module RaiderReporter
     end
 
     private
+
+    def attachment_limit(content_type)
+      content_type.start_with?("video/") ? configuration.max_video_bytes : configuration.max_attachment_bytes
+    end
 
     # First, so a later reporting problem cannot lose it. A failure here only means
     # no summary, and exec then keeps the command's exit code.

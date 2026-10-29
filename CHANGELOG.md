@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0 — 2026-10-26
+
+- Video attachments play inline in the HTML report: `video/*` attachments render as a `<video controls>` player (metadata preloaded only) with a download link, instead of a plain link. Unsafe paths are still dropped
+- Videos get their own size cap, `config.max_video_bytes` (default 50 MB); the 5 MB `max_attachment_bytes` still applies to everything else. A video over its cap is skipped with a warning
+- Uploads keep non-video attachments (screenshots, logs) first; videos then fill whatever room is left in the upload budget. A video that does not fit is skipped and later, smaller ones are still tried
+- The Cucumber formatter works on Cucumber 12, which removed `config.strict`: it no longer logs `undefined method 'strict'` and keeps its failure counts (Cucumber 10 and 11 behave as before)
+- No breaking changes
+
 ## 0.9.0 — 2026-10-24
 
 - `raider-reporter gate` waits for the Raider quality gate verdict of the CI build (`GET /api/v1/builds/gate`, every 10 seconds, up to `RAIDER_GATE_TIMEOUT` seconds, default 600, 1–3600) and exits 0 when the gate passed or the project has no gate rules, 1 when it failed (naming the failed rules), and 2 when it gets no verdict (timeout, Raider unreachable, token rejected, build not found, any other error). 429, 5xx and network errors are retried within the time limit

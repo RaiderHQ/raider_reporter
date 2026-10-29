@@ -224,8 +224,11 @@ module RaiderReporter
           href = safe_href(attachment["path"])
           next unless href
 
-          if attachment["content_type"].to_s.start_with?("image/")
+          content_type = attachment["content_type"].to_s
+          if content_type.start_with?("image/")
             %(<a href="#{href}"><img loading="lazy" src="#{href}" alt="#{h(attachment['name'])}"></a>)
+          elsif content_type.start_with?("video/")
+            %(<video controls preload="metadata" src="#{href}"></video><a href="#{href}" download>#{h(attachment['name'])}</a>)
           else
             %(<a href="#{href}">#{h(attachment['name'])}</a>)
           end
@@ -280,6 +283,7 @@ module RaiderReporter
         .r p{margin:2px 0;overflow-wrap:anywhere}.n{font-weight:500}.x{color:var(--ruby);font-weight:600}
         pre{margin:4px 0;padding:8px;background:var(--card);border-radius:6px;overflow-x:auto;white-space:pre-wrap;font-size:12px}
         .a img{max-width:100%;max-height:240px;border:1px solid var(--bdr);border-radius:4px;margin-top:4px}
+        .a video{max-width:100%;max-height:360px;display:block}
         a{color:var(--ruby)}.empty{padding:24px 0;color:var(--mute)}
       CSS
 

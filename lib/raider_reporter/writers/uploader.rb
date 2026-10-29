@@ -48,28 +48,57 @@ module RaiderReporter
 
       private
 
-      # Keeps the leading attachments that fit the byte and count budget and
-      # rebuilds the payload without the rest, so part names stay contiguous.
-      # The local run.json is written from the original payload and keeps all.
+      # Keeps the attachments that fit the byte and count budget, non-video
+      # attachments first and videos in whatever room is left, and rebuilds the
+      # payload without the rest, so part names stay contiguous. Survivors keep
+      # their original order. The local run.json is written from the original
+      # payload and keeps all.
       def within_budget(payload)
         entries = payload.attachment_entries
-        bytes = 0
-        keep = entries.index do |entry|
-          bytes += File.size?(entry[:attachment].source_path).to_i
-          bytes > MAX_UPLOAD_ATTACHMENT_BYTES
-        end || entries.size
-        keep = [keep, MAX_UPLOAD_ATTACHMENTS].min
-        return payload if keep == entries.size
+        keep = budgeted(entries)
+        return payload if keep.size == entries.size
 
-        dropped = entries.size - keep
+        dropped = entries.size - keep.size
         @warn.call("not uploading #{dropped} #{dropped == 1 ? 'attachment' : 'attachments'}: over the upload " \
                    "budget of #{MAX_UPLOAD_ATTACHMENT_BYTES / (1024 * 1024)} MB / " \
                    "#{MAX_UPLOAD_ATTACHMENTS} files; they remain in #{@config.output_dir}")
-        seen = 0
         run = payload.run
         Payload.new(run.with(results: run.results.map do |result|
-          result.with(attachments: result.attachments.select { (seen += 1) <= keep })
+          result.with(attachments: result.attachments.select { |attachment| keep.key?(attachment) })
         end))
+      end
+
+      # Identity-keyed set of the attachments to upload. Non-videos come first
+      # and stop at the first byte overflow; videos then fill the room left,
+      # a video that does not fit is skipped and later ones are still tried.
+      def budgeted(entries)
+        videos, others = entries.partition { |entry| video?(entry[:attachment]) }
+        keep = {}.compare_by_identity
+        bytes = 0
+        others.each do |entry|
+          bytes += size_of(entry)
+          break if bytes > MAX_UPLOAD_ATTACHMENT_BYTES || keep.size >= MAX_UPLOAD_ATTACHMENTS
+
+          keep[entry[:attachment]] = true
+        end
+        videos.each do |entry|
+          break if keep.size >= MAX_UPLOAD_ATTACHMENTS
+
+          size = size_of(entry)
+          next if bytes + size > MAX_UPLOAD_ATTACHMENT_BYTES
+
+          bytes += size
+          keep[entry[:attachment]] = true
+        end
+        keep
+      end
+
+      def video?(attachment)
+        attachment.content_type.to_s.start_with?("video/")
+      end
+
+      def size_of(entry)
+        File.size?(entry[:attachment].source_path).to_i
       end
 
       def add_field(body, boundary, name, value)

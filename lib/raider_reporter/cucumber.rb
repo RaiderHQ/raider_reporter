@@ -5,7 +5,7 @@ begin
 rescue LoadError => e
   raise unless e.path == "cucumber"
 
-  raise LoadError, "raider_reporter/cucumber needs the cucumber gem (>= 9, < 12) in your Gemfile"
+  raise LoadError, "raider_reporter/cucumber needs the cucumber gem (>= 9, < 13) in your Gemfile"
 end
 require "raider_reporter"
 require_relative "cucumber/formatter"

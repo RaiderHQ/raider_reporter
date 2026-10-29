@@ -89,6 +89,37 @@ RSpec.describe "RaiderReporter.attach" do
     end
   end
 
+  it "accepts a video larger than max_attachment_bytes but within max_video_bytes" do
+    RaiderReporter.configuration.max_attachment_bytes = 3
+    RaiderReporter.configuration.max_video_bytes = 10
+    collector = RaiderReporter.start_collector!
+    collector.start_run
+    collector.start_test
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "clip.webm")
+      File.binwrite(path, "fivebytes")
+      expect(RaiderReporter.attach("video", path, type: :webm)).to be(true)
+      expect(finish(collector).attachments.map(&:content_type)).to eq(["video/webm"])
+    end
+  end
+
+  it "rejects a video over max_video_bytes and keeps the screenshot on the same test" do
+    RaiderReporter.configuration.max_video_bytes = 3
+    collector = RaiderReporter.start_collector!
+    collector.start_run
+    collector.start_test
+    Dir.mktmpdir do |dir|
+      shot_path = File.join(dir, "shot.png")
+      video_path = File.join(dir, "clip.webm")
+      File.binwrite(shot_path, "ab")
+      File.binwrite(video_path, "abcd")
+      expect(RaiderReporter.attach("screenshot", shot_path, type: :png)).to be(true)
+      expect(RaiderReporter.attach("video", video_path, type: :webm)).to be(false)
+      expect(err.string).to include("clip.webm").and include("larger than 3 bytes")
+      expect(finish(collector).attachments.map(&:name)).to eq(["screenshot"])
+    end
+  end
+
   it "maps explicit types" do
     expect(RaiderReporter::ContentTypes.resolve(:png, "a.bin")).to eq("image/png")
     expect(RaiderReporter::ContentTypes.resolve(:video, "a.mov")).to eq("video/quicktime")
