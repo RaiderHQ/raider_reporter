@@ -60,7 +60,7 @@ jobs:
         with:
           ruby-version: "4.0"
           bundler-cache: true
-      - uses: google/osv-scanner-action/osv-scanner-action@v2
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.7.0
         with:
           scan-args: |-
             --lockfile=Gemfile.lock
