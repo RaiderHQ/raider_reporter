@@ -17,23 +17,48 @@ module RaiderReporter
       excluded = excluded_prefixes
       Array(backtrace).each do |line|
         line = line.to_s
-        path = line[/\A(.+?):\d+/, 1]
-        next if path.nil? || path.start_with?("<internal:", "(", "-")
-
-        absolute = File.expand_path(path, base)
-        next unless File.file?(absolute)
-
-        absolute = inside_root(absolute, base)
-        next unless absolute
-        next if excluded.any? { |prefix| absolute.start_with?(prefix) }
-
-        relative = absolute.delete_prefix(base)
-        next if relative.start_with?("vendor/", ".bundle/") || relative.include?("/.bundle/")
-
-        return Text.utf8("#{relative}#{line[path.length..]}")[0, MAX_LENGTH]
+        relative = relative_path(line, base, excluded)
+        return Text.utf8("#{relative}#{line[line[/\A(.+?):\d+/, 1].length..]}")[0, MAX_LENGTH] if relative
       end
       nil
     end
+
+    # Rewrites every backtrace line that lies in project code to
+    # "relative/path.rb:42:in '...'"; all other lines are returned unchanged.
+    def self.relativize(backtrace, root:)
+      return [] if backtrace.nil? || backtrace.empty?
+      return backtrace if root.nil?
+
+      base = "#{File.expand_path(root.to_s).chomp("/")}/"
+      excluded = excluded_prefixes
+      Array(backtrace).map do |line|
+        text = line.to_s.scrub
+        relative = relative_path(text, base, excluded)
+        relative ? "#{relative}#{text[text[/\A(.+?):\d+/, 1].length..]}" : line
+      rescue StandardError
+        line
+      end
+    end
+
+    # The project-relative path of a backtrace line's file, or nil when the
+    # line is not in project code.
+    def self.relative_path(line, base, excluded)
+      path = line[/\A(.+?):\d+/, 1]
+      return nil if path.nil? || path.start_with?("<internal:", "(", "-")
+
+      absolute = File.expand_path(path, base)
+      return nil unless File.file?(absolute)
+
+      absolute = inside_root(absolute, base)
+      return nil unless absolute
+      return nil if excluded.any? { |prefix| absolute.start_with?(prefix) }
+
+      relative = absolute.delete_prefix(base)
+      return nil if relative.start_with?("vendor/", ".bundle/") || relative.include?("/.bundle/")
+
+      relative
+    end
+    private_class_method :relative_path
 
     # Returns the path (rewritten under base when only the real paths match,
     # e.g. a symlinked tmpdir) or nil when it lies outside the root.

@@ -85,6 +85,12 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       expect(result["failure"]["backtrace"].size).to be_between(1, 50)
     end
 
+    it "writes the step definition frame project-relative in the backtrace" do
+      failure = results.fetch("Login: A user is rejected")["failure"]
+      expect(failure["backtrace"]).to include(a_string_matching(%r{\Afeatures/step_definitions/steps\.rb:\d+}))
+      expect(failure["app_frame"]).to start_with("features/step_definitions/")
+    end
+
     it "reports the step definition frame as app_frame" do
       failure = results.fetch("Login: A user is rejected")["failure"]
       expect(failure["app_frame"]).to match(%r{\Afeatures/step_definitions/steps\.rb:\d+:in })

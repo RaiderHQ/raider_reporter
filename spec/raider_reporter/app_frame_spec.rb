@@ -94,4 +94,45 @@ RSpec.describe RaiderReporter::AppFrame do
   it "truncates results to 500 characters" do
     expect(frame(["#{root}/spec/login_spec.rb:1:in '#{"x" * 600}'"]).length).to eq(500)
   end
+
+  describe ".relativize" do
+    def relativize(backtrace, root: self.root) = described_class.relativize(backtrace, root: root)
+
+    it "rewrites in-project lines relative to the root, keeping the suffix" do
+      expect(relativize(["#{root}/spec/login_spec.rb:3:in 'x'"])).to eq(["spec/login_spec.rb:3:in 'x'"])
+    end
+
+    it "leaves gem, internal and vendor lines unchanged" do
+      allow(Gem).to receive(:path).and_return(["#{root}/gemhome"])
+      lines = ["#{root}/gemhome/gems/z.rb:3:in 'c'", "<internal:kernel>:187:in 'loop'",
+               "#{root}/vendor/bundle/x.rb:1:in 'a'", "/gems/capybara-3/lib/node.rb:10:in 'find'"]
+      expect(relativize(lines)).to eq(lines)
+    end
+
+    it "relativizes only the project lines of a mixed backtrace, in order" do
+      lines = ["/gems/x/lib/x.rb:1:in 'a'", page_line, "<internal:kernel>:1:in 'b'"]
+      expect(relativize(lines)).to eq(["/gems/x/lib/x.rb:1:in 'a'", page_frame, "<internal:kernel>:1:in 'b'"])
+    end
+
+    it "relativizes through a symlinked root" do
+      link = "#{root}-link"
+      File.symlink(root, link)
+      begin
+        expect(relativize(["#{root}/spec/login_spec.rb:5:in 'b'"], root: link)).to eq(["spec/login_spec.rb:5:in 'b'"])
+      ensure
+        File.delete(link)
+      end
+    end
+
+    it "relativizes other lines when one line has invalid UTF-8" do
+      bad = "/tmp/\xFF/bad.rb:1:in 'x'".dup.force_encoding("UTF-8")
+      expect(relativize([bad, page_line])).to eq([bad, page_frame])
+    end
+
+    it "returns [] for nil or empty input and the input for a nil root" do
+      expect(relativize(nil)).to eq([])
+      expect(relativize([])).to eq([])
+      expect(relativize([page_line], root: nil)).to eq([page_line])
+    end
+  end
 end
