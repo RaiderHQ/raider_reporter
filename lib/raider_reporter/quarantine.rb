@@ -11,7 +11,7 @@ module RaiderReporter
   NUL = "\u0000"
   NUL_REPLACEMENT = "\u{FFFD}"
 
-  # The server's test identity: raider_saas TestCase.key_for over the payload's
+  # The server's test identity: Raider Hideout's TestCase.key_for over the payload's
   # file_path and full_name, after ingest replaced NUL in each of them.
   def self.test_key(file_path, full_name)
     parts = [file_path, full_name].map { |part| part.to_s.tr(NUL, NUL_REPLACEMENT) }

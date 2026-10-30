@@ -142,7 +142,7 @@ end
 | Option | Default | Description |
 | --- | --- | --- |
 | `token` | `ENV["RAIDER_TOKEN"]` | API token used for uploads. |
-| `endpoint` | `ENV["RAIDER_ENDPOINT"]` | Base URL of the Raider server to upload to. |
+| `endpoint` | `ENV["RAIDER_ENDPOINT"]` | Base URL of your Raider Hideout server (what its setup page or bin/rails hideout:setup prints as RAIDER_ENDPOINT). |
 | `output_dir` | `"raider-results"` | Directory for local output. |
 | `clean_output_dir` | `true` | Remove the previous `run.json` and `attachments/` directory (`run-<n>.json` and `attachments-<n>/` when sharded) inside `output_dir` before writing. Nothing else in `output_dir` is touched, except a raider_reporter-written `index.html`. |
 | `html_report` | `true` | Write `index.html`, the local HTML report, into `output_dir` after each run. See [Local report](#local-report). |
@@ -180,7 +180,7 @@ Set `config.html_report = false` to turn it off. An `index.html` that raider_rep
 If both a token and an endpoint are set, the run (plus attachments) is uploaded when the suite finishes:
 
 ```
-RAIDER_TOKEN=... RAIDER_ENDPOINT=https://your-raider-server bundle exec rspec
+RAIDER_TOKEN=... RAIDER_ENDPOINT=https://hideout.example.com bundle exec rspec
 ```
 
 On success the formatter prints `Raider report: <url>` to stderr (so tools that parse RSpec's stdout, such as `--format json`, stay clean), using the build URL when the server returns one and the run URL otherwise (or `Raider report uploaded (run <id>)` if the response has no URL). If either value is missing, nothing is uploaded and the local files are still written.
@@ -189,7 +189,7 @@ An upload carries at most 45 MB of attachments and at most 1000 attachment files
 
 Reporting is fail-open: no error inside the gem, network failure, timeout or non-2xx response will raise or change RSpec's exit status. Each connect/write/read step of the upload times out after 30 seconds. Problems are printed as warnings prefixed with `[raider_reporter]`. An endpoint without `http://` or `https://` (for example `localhost:3000`) produces a warning and nothing is uploaded; a trailing slash is fine.
 
-The hosted Raider service is not public yet; uploads go to a Raider server whose address you provide in `RAIDER_ENDPOINT`.
+Raider Hideout is self-hosted: run your own server and set `RAIDER_ENDPOINT` to its URL. There is no hosted service.
 
 ## Quarantine
 
@@ -234,10 +234,10 @@ On pull requests, `raider-reporter comment` posts one comment with the build's r
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-- The comment is rendered by the Raider server (`GET /api/v1/builds/summary`); the gem only fetches the Markdown and posts it. The same comment is updated on every run instead of adding a new one.
+- The comment is rendered by the Raider Hideout server (`GET /api/v1/builds/summary`); the gem only fetches the Markdown and posts it. The same comment is updated on every run instead of adding a new one.
 - Pull requests from forks are skipped: GitHub gives their workflows a read-only token, so the command prints a notice and exits 0.
 - The command never fails your CI: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`; if one is missing, or the event is not a pull request, it does nothing.
-- It requires a Raider server that supports the summary endpoint and the `git.pr` field. Upgrade the server before using it.
+- It requires a Raider Hideout server that supports the summary endpoint and the `git.pr` field. Upgrade the server before using it.
 
 ## Quality gate
 
@@ -317,7 +317,7 @@ jobs:
 - **Artifact names:** pipeline artifacts cannot be overwritten within a run, so the name includes the job position and attempt. A fixed name would fail when you re-run failed jobs or use `strategy: parallel`.
 - **Azure Repos only:** the PR comment works for repositories hosted in Azure Repos. A GitHub-hosted repository built by Azure Pipelines still uploads results, but `comment` prints `skipped: not an Azure Repos pull request`.
 - **Parallel jobs:** `strategy: parallel: N` shards are detected automatically and grouped into one build, like GitHub matrix jobs.
-- The command never fails your pipeline: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `SYSTEM_ACCESSTOKEN`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`, and requires a Raider server that supports the summary endpoint.
+- The command never fails your pipeline: it always exits 0 and prints notices to stderr, prefixed `[raider_reporter]`. It needs `SYSTEM_ACCESSTOKEN`, `RAIDER_TOKEN` and `RAIDER_ENDPOINT`, and requires a Raider Hideout server that supports the summary endpoint.
 
 ## Parallel runs
 
