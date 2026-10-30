@@ -24,10 +24,12 @@ module RaiderReporter
 
       def start(_notification)
         guard { @collector.start_run }
+        guard { RaiderReporter.event_stream&.plan(planned_tests) }
       end
 
-      def example_started(_notification)
+      def example_started(notification)
         guard { @collector.start_test }
+        guard { RaiderReporter.event_stream&.started(event_test(notification.example)) }
       end
 
       def example_passed(notification)
@@ -53,6 +55,10 @@ module RaiderReporter
       end
 
       def close(_notification)
+        guard do
+          RaiderReporter.event_stream&.done
+          RaiderReporter.event_stream&.close
+        end
         guard { RaiderReporter.finish! }
       end
 
@@ -66,17 +72,38 @@ module RaiderReporter
         failure = status == "failed" ? failure_for(execution.exception) : nil
         # The key is computed from the payload's own file_path and full_name (spec §4.2).
         status = "quarantined" if status == "failed" && @collector.quarantined?(file_path, full_name)
-        @collector.finish_test(
-          identifier: example.id,
-          full_name: full_name,
-          file_path: file_path,
-          line_number: metadata[:line_number],
-          status: status,
-          duration_ms: ((execution.run_time || 0) * 1000).round,
-          attempts: metadata.fetch(:retry_attempts, 0).to_i + 1,
-          tags: metadata.select { |key, value| value == true && !NON_TAG_KEYS.include?(key) }.keys.map(&:to_s).sort,
-          failure: failure
-        )
+        attempts = metadata.fetch(:retry_attempts, 0).to_i + 1
+        duration_ms = ((execution.run_time || 0) * 1000).round
+        begin
+          @collector.finish_test(
+            identifier: example.id,
+            full_name: full_name,
+            file_path: file_path,
+            line_number: metadata[:line_number],
+            status: status,
+            duration_ms: duration_ms,
+            attempts: attempts,
+            tags: metadata.select { |key, value| value == true && !NON_TAG_KEYS.include?(key) }.keys.map(&:to_s).sort,
+            failure: failure
+          )
+        ensure
+          # Even if recording failed: the desktop app must still see the example end
+          RaiderReporter.event_stream&.finished(id: example.id, status: status, duration_ms: duration_ms,
+                                                attempts: attempts)
+        end
+      end
+
+      # The examples this run will execute (after tag/line filters), in run order.
+      def planned_tests
+        world = ::RSpec.world
+        world.ordered_example_groups.flat_map(&:descendants)
+             .flat_map { |group| world.filtered_examples[group] }.map { |example| event_test(example) }
+      end
+
+      def event_test(example)
+        { id: example.id, file: example.metadata[:file_path].to_s.delete_prefix("./"),
+          line: example.metadata[:line_number], description: example.description,
+          full_name: example.full_description }
       end
 
       # Errors RSpec reported outside examples, plus one when it stopped early

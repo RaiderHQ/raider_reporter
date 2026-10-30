@@ -253,4 +253,80 @@ RSpec.describe "RaiderReporter::RSpec::Formatter" do
       end
     end
   end
+
+  describe "live events" do
+    def events_in(events_dir)
+      File.readlines(File.join(events_dir, "worker-1.ndjson")).map { |line| JSON.parse(line) }
+    end
+
+    def run_with_events(dir, *args)
+      events_dir = File.join(dir, "events")
+      run_suite(dir, { "RAIDER_EVENTS_DIR" => events_dir }, args)
+      events_in(events_dir)
+    end
+
+    it "plans exactly the filtered examples" do
+      Dir.mktmpdir do |dir|
+        events = run_with_events(dir, "--tag", "smoke")
+        plan = events.find { |e| e["type"] == "plan" }
+        ran = events.select { |e| e["type"] == "finished" }.map { |e| e["id"] }
+        expect(plan["tests"].map { |t| t["id"] }).to eq(ran)
+        expect(ran).to eq(["./sample_spec.rb[1:1]"])
+        expect(plan["tests"][0]).to include("file" => "sample_spec.rb", "description" => "passes",
+                                            "full_name" => "Sample passes")
+      end
+    end
+
+    it "emits started then finished per example, ending with done" do
+      Dir.mktmpdir do |dir|
+        events = run_with_events(dir)
+        expect(events.first["type"]).to eq("plan")
+        expect(events.last).to eq("v" => 1, "type" => "done")
+        body = events[1...-1]
+        expect(body.map { |e| e["type"] }).to eq(%w[started finished] * 6)
+        expect(body.each_slice(2).all? { |s, f| s["id"] == f["id"] }).to be(true)
+      end
+    end
+
+    it "still emits finished for every example when recording it raises" do
+      Dir.mktmpdir do |dir|
+        boom = File.join(dir, "boom.rb")
+        File.write(boom, <<~RUBY)
+          require "raider_reporter"
+          RaiderReporter::Collector.prepend(Module.new { def finish_test(**) = raise("boom in finish_test") })
+        RUBY
+        events = run_with_events(dir, "--require", boom)
+        expect(events.count { |e| e["type"] == "finished" }).to eq(6)
+        expect(events.last["type"]).to eq("done")
+      end
+    end
+
+    it "reports a retried example once with its attempts" do
+      Dir.mktmpdir do |dir|
+        events = run_with_events(dir)
+        retried = events.select { |e| e["type"] == "finished" && e["id"] == "./sample_spec.rb[1:3]" }
+        expect(retried.size).to eq(1)
+        expect(retried[0]["attempts"]).to eq(2)
+      end
+    end
+
+    it "emits quarantined as the finished status" do
+      Dir.mktmpdir do |dir|
+        key = RaiderReporter.test_key("sample_spec.rb", "Sample fails with a screenshot")
+        events_dir = File.join(dir, "events")
+        FakeRaider.with_quarantine([key]) do |env, _server|
+          run_suite(dir, env.merge("RAIDER_EVENTS_DIR" => events_dir))
+        end
+        statuses = events_in(events_dir).select { |e| e["type"] == "finished" }.map { |e| e["status"] }
+        expect(statuses).to include("quarantined")
+      end
+    end
+
+    it "writes no events file when RAIDER_EVENTS_DIR is unset" do
+      Dir.mktmpdir do |dir|
+        run_suite(dir, { "RAIDER_EVENTS_DIR" => nil })
+        expect(Dir.glob(File.join(dir, "**", "*.ndjson"))).to be_empty
+      end
+    end
+  end
 end

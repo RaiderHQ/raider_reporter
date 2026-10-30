@@ -100,6 +100,7 @@ module RaiderReporter
         RaiderReporter.dry_run = config.dry_run?
         config.on_event(:test_run_started) { |_event| guard { @collector.start_run } }
         config.on_event(:test_run_started) { |event| guard { expect_cases(event.test_cases) } }
+        config.on_event(:test_run_started) { |event| guard { RaiderReporter.event_stream&.plan(event.test_cases.map { |tc| event_test(tc) }) } }
         config.on_event(:test_case_finished) { |event| count_outcome(event.test_case, event.result) }
         config.on_event(:test_case_started) { |event| guard { case_started(event.test_case) } }
         config.on_event(:test_step_finished) { |event| guard { step_finished(event.test_step, event.result) } }
@@ -113,6 +114,7 @@ module RaiderReporter
       def case_started(test_case)
         @collector.start_test
         @attempt = { test_case: test_case }
+        RaiderReporter.event_stream&.started(event_test(test_case))
       end
 
       # The first non-passed step explains why the scenario did not pass.
@@ -133,10 +135,16 @@ module RaiderReporter
         status = "quarantined" if status == "failed" && quarantined?(fields)
         key = "#{test_case.location}|#{test_case.name}"
         @attempts[key] += 1
-        # The newest attempt replaces the older one, taking its attachments with it.
-        @buffer[key] = @collector.build_test(
-          **fields, status: status, duration_ms: duration_ms(result), attempts: @attempts[key], failure: failure
-        )
+        begin
+          # The newest attempt replaces the older one, taking its attachments with it.
+          @buffer[key] = @collector.build_test(
+            **fields, status: status, duration_ms: duration_ms(result), attempts: @attempts[key], failure: failure
+          )
+        ensure
+          # Even if building the result failed: the desktop app must still see the attempt end
+          RaiderReporter.event_stream&.finished(id: fields[:identifier], status: status,
+                                                duration_ms: duration_ms(result), attempts: @attempts[key])
+        end
       end
 
       def run_finished
@@ -145,7 +153,21 @@ module RaiderReporter
         safely(nil) { record_framework_counts }
         RaiderReporter.finish!($stderr)
       ensure
+        # Even if finish! raised, so the desktop app sees the stream end
+        safely(nil) { finish_events }
         self.class.release(@config)
+      end
+
+      def finish_events
+        stream = RaiderReporter.event_stream
+        stream&.done
+        stream&.close
+      end
+
+      def event_test(test_case)
+        fields = identity_for(test_case)
+        { id: fields[:identifier], file: fields[:file_path], line: fields[:line_number],
+          description: Text.utf8(test_case.name), full_name: fields[:full_name] }
       end
 
       def expect_cases(test_cases)

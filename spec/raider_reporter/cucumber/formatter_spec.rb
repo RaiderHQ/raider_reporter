@@ -359,6 +359,69 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
     end
   end
 
+  describe "live events" do
+    def events_in(events_dir)
+      File.readlines(File.join(events_dir, "worker-1.ndjson")).map { |line| JSON.parse(line) }
+    end
+
+    def run_with_events(*targets, extra_env_more: {}, **opts)
+      Dir.mktmpdir do |dir|
+        events_dir = File.join(dir, "events")
+        env = attempt_env(dir).merge("RAIDER_EVENTS_DIR" => events_dir).merge(extra_env_more)
+        run_cucumber(*targets, extra_env: env, **opts)
+        return events_in(events_dir)
+      end
+    end
+
+    it "plans every test case before the first starts" do
+      events = run_with_events("features/login.feature")
+      plan = events.first
+      expect(plan["type"]).to eq("plan")
+      expect(plan["tests"].size).to eq(events.count { |e| e["type"] == "started" })
+      expect(plan["tests"][0]).to include(
+        "id" => "features/login.feature:3", "file" => "features/login.feature", "line" => 3,
+        "description" => "A user can login", "full_name" => "Login: A user can login"
+      )
+      expect(events.index { |e| e["type"] == "started" }).to be > 0
+      expect(events.map { |e| e["v"] }.uniq).to eq([1])
+    end
+
+    it "emits started and finished per attempt under --retry" do
+      events = run_with_events("features/retry.feature", extra_args: ["--retry", "1"])
+      flaky = events.select { |e| e["id"] == "features/retry.feature:3" }
+      expect(flaky.map { |e| e["type"] }).to eq(%w[started finished started finished])
+      finished = flaky.select { |e| e["type"] == "finished" }
+      expect(finished.map { |e| e["attempts"] }).to eq([1, 2])
+      expect(finished.map { |e| e["status"] }).to eq(%w[failed passed])
+    end
+
+    it "ends with done" do
+      events = run_with_events("features/login.feature")
+      expect(events.last["type"]).to eq("done")
+      expect(events.count { |e| e["type"] == "done" }).to eq(1)
+    end
+
+    it "still ends with done when finishing the run raises" do
+      events = run_with_events("features/login.feature", extra_env_more: { "FIXTURE_BREAK_FINISH" => "1" })
+      expect(@last[:stderr]).to include("finish exploded")
+      expect(events.last["type"]).to eq("done")
+    end
+
+    it "still emits finished for every attempt when building the result raises" do
+      events = run_with_events("features/login.feature", extra_env_more: { "RAIDER_FIXTURE_BOOM" => "1" })
+      started = events.count { |e| e["type"] == "started" }
+      expect(started).to be > 0
+      expect(events.count { |e| e["type"] == "finished" }).to eq(started)
+    end
+
+    it "writes nothing when RAIDER_EVENTS_DIR is unset" do
+      Dir.mktmpdir do |dir|
+        run_cucumber("features/login.feature", extra_env: { "RAIDER_EVENTS_DIR" => nil }, out_dir: dir)
+        expect(Dir.glob(File.join(dir, "**", "*.ndjson"))).to be_empty
+      end
+    end
+  end
+
   describe "attachments" do
     def attachment_names(result) = result["attachments"].map { |a| a["name"] }
 
