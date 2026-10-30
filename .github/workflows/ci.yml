@@ -3,7 +3,11 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: "0 6 * * 1" # weekly, to catch new 9.x/10.x/11.x/12.x Cucumber releases
+    - cron: "0 6 * * 1" # weekly, to catch new 9.x/10.x/11.x/12.x Cucumber releases and new advisories
+
+permissions:
+  contents: read
+
 jobs:
   spec:
     runs-on: ubuntu-latest
@@ -38,3 +42,28 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       - run: bundle exec rspec
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+      - run: bundle exec bundler-audit check --update
+      - run: bundle exec ruby-audit check
+      - run: bundle exec rubocop
+
+  osv-scanner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1 # resolves Gemfile.lock, which is not committed
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.7.0
+        with:
+          scan-args: |-
+            --lockfile=Gemfile.lock
