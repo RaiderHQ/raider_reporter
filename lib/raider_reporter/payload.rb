@@ -88,7 +88,10 @@ module RaiderReporter
 
     def attachment_hash(entry, mode)
       ref = mode == :local ? { "path" => entry[:path] } : { "part" => entry[:part] }
-      { "name" => entry[:attachment].name, "content_type" => entry[:attachment].content_type }.merge(ref)
+      attachment = entry[:attachment]
+      hash = { "name" => attachment.name, "content_type" => attachment.content_type }.merge(ref)
+      hash["attempt"] = attachment.attempt if attachment.attempt
+      hash
     end
   end
 end

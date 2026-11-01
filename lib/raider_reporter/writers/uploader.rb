@@ -4,6 +4,7 @@ require "net/http"
 require "uri"
 require "json"
 require "securerandom"
+require_relative "../content_types"
 
 module RaiderReporter
   module Writers
@@ -48,8 +49,9 @@ module RaiderReporter
 
       private
 
-      # Keeps the attachments that fit the byte and count budget, non-video
-      # attachments first and videos in whatever room is left, and rebuilds the
+      # Keeps the attachments that fit the byte and count budget: screenshots,
+      # logs and other files first, then traces, then videos in whatever room
+      # is left. It rebuilds the
       # payload without the rest, so part names stay contiguous. Survivors keep
       # their original order. The local run.json is written from the original
       # payload and keeps all.
@@ -68,11 +70,13 @@ module RaiderReporter
         end))
       end
 
-      # Identity-keyed set of the attachments to upload. Non-videos come first
-      # and stop at the first byte overflow; videos then fill the room left,
-      # a video that does not fit is skipped and later ones are still tried.
+      # Identity-keyed set of the attachments to upload. Other files come first
+      # and stop at the first byte overflow; traces and then videos fill the
+      # room left, and one that does not fit is skipped while later ones are
+      # still tried.
       def budgeted(entries)
-        videos, others = entries.partition { |entry| video?(entry[:attachment]) }
+        traces, rest = entries.partition { |entry| ContentTypes.trace?(entry[:attachment].content_type) }
+        videos, others = rest.partition { |entry| ContentTypes.video?(entry[:attachment].content_type) }
         keep = {}.compare_by_identity
         bytes = 0
         others.each do |entry|
@@ -81,7 +85,7 @@ module RaiderReporter
 
           keep[entry[:attachment]] = true
         end
-        videos.each do |entry|
+        (traces + videos).each do |entry|
           break if keep.size >= MAX_UPLOAD_ATTACHMENTS
 
           size = size_of(entry)
@@ -91,10 +95,6 @@ module RaiderReporter
           keep[entry[:attachment]] = true
         end
         keep
-      end
-
-      def video?(attachment)
-        attachment.content_type.to_s.start_with?("video/")
       end
 
       def size_of(entry)

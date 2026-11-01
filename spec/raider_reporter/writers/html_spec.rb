@@ -132,6 +132,20 @@ RSpec.describe RaiderReporter::Writers::Html do
     expect(html).not_to include("secret.txt", "/etc/passwd")
   end
 
+  it "renders traces as a download link that names Raider Desktop" do
+    attachments = [
+      { "name" => "trace", "content_type" => "application/vnd.raider.trace+zip", "path" => "attachments/0-trace.zip",
+        "attempt" => 2 },
+      { "name" => "trace", "content_type" => "application/vnd.raider.trace+zip", "path" => "attachments/1-trace.zip" }
+    ]
+    write_run("run.json", [result("traced", "failed", "attachments" => attachments)])
+
+    described_class.new.write(dir)
+
+    expect(html).to include(%(<a href="attachments/0-trace.zip" download>Trace, attempt 2 (open in Raider Desktop)</a>))
+    expect(html).to include(%(<a href="attachments/1-trace.zip" download>Trace (open in Raider Desktop)</a>))
+  end
+
   it "renders videos as an inline player with a download link and drops unsafe video paths" do
     attachments = [
       { "name" => "video", "content_type" => "video/webm", "path" => "attachments/a b/clip.webm" },

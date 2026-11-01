@@ -101,7 +101,7 @@ Cucumber's `attach` is captured only when given the path of an existing file. In
 
 `parallel_tests` works with no configuration for Cucumber too: each process writes `run-<n>.json`. See [Parallel runs](#parallel-runs).
 
-## Attaching screenshots and videos
+## Attaching screenshots, videos and traces
 
 Call `RaiderReporter.attach` while an example is running, for example from an `after` hook:
 
@@ -120,11 +120,13 @@ end
 
 `attach` copies the file right away, so the attachment keeps the bytes the file had at that moment even if the same path is overwritten by a later example. Using a path per example (as above) still makes the files on disk easier to find.
 
-`attach` returns `true` on success. It returns `false` and prints a `[raider_reporter]` warning, never raising, if it is called outside a running example (for instance when the formatter is not loaded), if the file does not exist, or if the file is larger than its size cap: 5 MB (`max_attachment_bytes`), or 50 MB for videos (`video/*`, `max_video_bytes`).
+`attach` returns `true` on success. It returns `false` and prints a `[raider_reporter]` warning, never raising, if it is called outside a running example (for instance when the formatter is not loaded), if the file does not exist, or if the file is larger than its size cap: 5 MB (`max_attachment_bytes`), 50 MB for videos (`video/*`, `max_video_bytes`), or 25 MB for traces (`max_trace_bytes`).
 
 Videos (`.webm`, `.mp4`) are attached the same way, for example `RaiderReporter.attach("video", path, type: :webm)`. In the local HTML report they play inline, with a download link.
 
-When a run is uploaded, screenshots and other non-video attachments are sent first; videos then fill the room left in the upload budget. A video that does not fit is skipped and later, smaller videos are still tried. The local `raider-results/attachments/` folder keeps every attachment that passed its size cap.
+Raider traces (`trace.zip`, content type `application/vnd.raider.trace+zip`, written by ruby_raider projects for failing tests) are attached with `RaiderReporter.attach("trace", path, type: :trace, attempt: 2)`. `attempt` is optional on any attachment. When given, it is written to the attachment's entry in `run.json` and in the upload, so a viewer can tell the traces of different retries apart. In the local HTML report a trace is a download link; open it in Raider Desktop. The format is described in the [trace viewer design](https://github.com/RaiderHQ/raider_planning/blob/main/docs/superpowers/specs/2026-11-01-trace-viewer-design.md).
+
+When a run is uploaded, screenshots and other attachments are sent first, then traces, then videos, in the room left in the upload budget. A trace or video that does not fit is skipped and later, smaller ones are still tried. The local `raider-results/attachments/` folder keeps every attachment that passed its size cap.
 
 ## Live events
 
@@ -149,6 +151,7 @@ end
 | `quarantine` | `true` when `ENV["RAIDER_QUARANTINE"]` is `1` or `true` | Fetch the quarantine list at run start and report matching failures as `quarantined`. Needs `token` and `endpoint`. See [Quarantine](#quarantine). |
 | `max_attachment_bytes` | `5 MB` | Largest non-video attachment `attach` accepts. |
 | `max_video_bytes` | `50 MB` | Largest `video/*` attachment `attach` accepts. |
+| `max_trace_bytes` | `25 MB` | Largest Raider trace (`application/vnd.raider.trace+zip`) `attach` accepts. |
 | `exec_summary_path` | `ENV["RAIDER_EXEC_SUMMARY"]` | File where the run writes its failure counts (framework failures, quarantined, errors outside tests) for `raider-reporter exec` to read when it decides the exit code. `exec` sets it for the command it runs; leave it unset otherwise. Nothing is written when it is unset. See [Quarantine](#quarantine). |
 | `environment` | `{}` | Free-form key/values stored with the run (browser, suite name, and so on). Values are JSON values: strings, booleans or numbers. |
 

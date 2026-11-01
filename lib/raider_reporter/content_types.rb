@@ -2,17 +2,25 @@
 
 module RaiderReporter
   module ContentTypes
+    TRACE = "application/vnd.raider.trace+zip"
+
     BY_EXTENSION = {
       ".png" => "image/png", ".jpg" => "image/jpeg", ".jpeg" => "image/jpeg", ".gif" => "image/gif",
       ".webp" => "image/webp", ".mp4" => "video/mp4", ".webm" => "video/webm", ".mov" => "video/quicktime",
-      ".txt" => "text/plain", ".log" => "text/plain", ".html" => "text/html", ".json" => "application/json"
+      ".txt" => "text/plain", ".log" => "text/plain", ".html" => "text/html", ".json" => "application/json",
+      ".zip" => "application/zip"
     }.freeze
     BY_SYMBOL = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", mp4: "video/mp4",
-                  webm: "video/webm", text: "text/plain", html: "text/html", json: "application/json" }.freeze
+                  webm: "video/webm", text: "text/plain", html: "text/html", json: "application/json",
+                  trace: TRACE }.freeze
 
     MIME = %r{\A[\w.+-]+/[\w.+-]+\z}
 
     module_function
+
+    def trace?(content_type) = content_type.to_s == TRACE
+
+    def video?(content_type) = content_type.to_s.start_with?("video/")
 
     def resolve(type, path)
       if type.is_a?(String)

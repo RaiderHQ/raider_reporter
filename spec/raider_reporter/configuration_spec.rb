@@ -7,6 +7,7 @@ RSpec.describe RaiderReporter::Configuration do
       .to eq(["t", "https://x", "raider-results", true])
     expect(config.max_attachment_bytes).to eq(5 * 1024 * 1024)
     expect(config.max_video_bytes).to eq(50 * 1024 * 1024)
+    expect(config.max_trace_bytes).to eq(25 * 1024 * 1024)
   end
 
   it "uploads only with both token and endpoint present" do

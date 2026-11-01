@@ -107,6 +107,36 @@ RSpec.describe RaiderReporter::Writers::Uploader do
     expect(warnings.first).to include("1 attachment")
   end
 
+  it "uploads screenshots, then traces, then videos in the room left" do
+    stub_const("#{described_class}::MAX_UPLOAD_ATTACHMENT_BYTES", 10)
+    stub_request(:post, url).to_return(status: 201, body: { run_id: 1, url: "u" }.to_json)
+    warnings = []
+    Dir.mktmpdir do |dir|
+      trace = "application/vnd.raider.trace+zip"
+      files = [["trace.zip", trace, 8], ["shot.png", "image/png", 3], ["log.txt", "text/plain", 2],
+               ["clip.webm", "video/webm", 4], ["small.zip", trace, 5]]
+      described_class.new(config, warn: ->(m) { warnings << m }).upload(typed_payload(dir, files))
+    end
+    json, body = uploaded_payload_json
+    expect(json["results"].map { |r| r["attachments"].size }).to eq([0, 1, 1, 0, 1])
+    expect(body).to include("shot.png", "log.txt", "small.zip")
+    expect(body).not_to include("clip.webm")
+    expect(body).not_to include('filename="trace.zip"')
+    expect(warnings.first).to include("not uploading 2 attachments")
+  end
+
+  it "skips a trace that does not fit and keeps a later smaller trace" do
+    stub_const("#{described_class}::MAX_UPLOAD_ATTACHMENT_BYTES", 7)
+    stub_request(:post, url).to_return(status: 201, body: { run_id: 1, url: "u" }.to_json)
+    Dir.mktmpdir do |dir|
+      files = [["big.zip", "application/vnd.raider.trace+zip", 20], ["small.zip", "application/vnd.raider.trace+zip", 3]]
+      described_class.new(config, warn: ->(_m) {}).upload(typed_payload(dir, files))
+    end
+    _json, body = uploaded_payload_json
+    expect(body).to include("small.zip")
+    expect(body).not_to include("big.zip")
+  end
+
   it "drops attachments beyond the part count limit from the upload" do
     stub_const("#{described_class}::MAX_UPLOAD_ATTACHMENTS", 2)
     stub_request(:post, url).to_return(status: 201, body: { run_id: 1, url: "u" }.to_json)

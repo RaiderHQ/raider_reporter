@@ -4,15 +4,18 @@ require "securerandom"
 require "tmpdir"
 require "fileutils"
 require "set"
+require_relative "content_types"
 
 module RaiderReporter
   # Accumulates one suite run. Framework formatters call it; writers read the Run it returns.
   class Collector
     def initialize(max_attachment_bytes:, warn:, max_video_bytes: Configuration::DEFAULT_MAX_VIDEO_BYTES,
+                   max_trace_bytes: Configuration::DEFAULT_MAX_TRACE_BYTES,
                    clock: -> { Time.now.utc }, uuid: -> { SecureRandom.uuid },
                    quarantine: -> { Quarantine::EMPTY })
       @max_attachment_bytes = max_attachment_bytes
       @max_video_bytes = max_video_bytes
+      @max_trace_bytes = max_trace_bytes
       @warn = warn
       @clock = clock
       @uuid = uuid
@@ -120,12 +123,19 @@ module RaiderReporter
         @warn.call("attachment #{path} no longer exists; skipped")
         return false
       end
-      limit = attachment.content_type.to_s.start_with?("video/") ? @max_video_bytes : @max_attachment_bytes
+      limit = limit_for(attachment.content_type)
       if File.size(path) > limit
         @warn.call("attachment #{path} is larger than #{limit} bytes; skipped")
         return false
       end
       true
+    end
+
+    def limit_for(content_type)
+      return @max_trace_bytes if ContentTypes.trace?(content_type)
+      return @max_video_bytes if ContentTypes.video?(content_type)
+
+      @max_attachment_bytes
     end
   end
 end
