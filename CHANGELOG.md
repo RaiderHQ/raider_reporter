@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.0 — 2026-11-01
+
+- Raider traces: the content type `application/vnd.raider.trace+zip` (`type: :trace`) gets its own size cap, `config.max_trace_bytes` (default 25 MB). The 5 MB `max_attachment_bytes` and the 50 MB `max_video_bytes` still apply to everything else. A trace over its cap is skipped with a warning
+- `RaiderReporter.attach(name, path, type:, attempt:)` takes an optional `attempt`, written to the attachment's entry in `run.json` and in the upload when given
+- Uploads send screenshots and other files first, then traces, then videos, in the room left in the budget. A trace that does not fit is skipped and later, smaller ones are still tried
+- The local HTML report shows a trace as a download link ("Trace (open in Raider Desktop)", with the attempt when known)
+- `.zip` files resolve to `application/zip`
+- No breaking changes
+
 ## 0.11.0 — 2026-10-29
 
 - Live events: when `RAIDER_EVENTS_DIR` is set, the RSpec formatter and the Cucumber formatter/plugin append NDJSON lines (`plan`, `started`, `finished`, `done`, each with `"v":1`) to `<dir>/worker-<n>.ndjson`, where `n` is the shard index (1 without a shard). Cucumber writes `started` and `finished` once per attempt under `--retry`. The Raider desktop app tails them during a run. The files are created owner-only (0600) and a symlinked file is refused. With the variable unset, nothing changes. A write error switches the stream off after one warning and never fails the suite

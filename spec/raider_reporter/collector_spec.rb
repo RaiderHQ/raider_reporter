@@ -18,6 +18,26 @@ RSpec.describe RaiderReporter::Collector do
     RaiderReporter::Attachment.new(name: name, source_path: path, content_type: "image/png")
   end
 
+  it "checks a trace against max_trace_bytes when the run finishes, not max_attachment_bytes" do
+    traced = described_class.new(max_attachment_bytes: 2, max_trace_bytes: 6, warn: ->(m) { warnings << m })
+    Dir.mktmpdir do |dir|
+      fits, too_big = [["ok.zip", 5], ["big.zip", 7]].map do |name, bytes|
+        path = File.join(dir, name)
+        File.binwrite(path, "x" * bytes)
+        RaiderReporter::Attachment.new(name: "trace", source_path: path,
+                                       content_type: RaiderReporter::ContentTypes::TRACE)
+      end
+      traced.start_run
+      traced.start_test
+      traced.attach(fits)
+      traced.attach(too_big)
+      traced.finish_test(**fields)
+      result = traced.finish_run(ci: nil, git: nil, environment: {}).results.first
+      expect(result.attachments.map { |a| File.basename(a.source_path) }).to eq(["ok.zip"])
+      expect(warnings.join).to include("big.zip", "larger than 6 bytes")
+    end
+  end
+
   it "builds a run with results and timing" do
     collector.start_run
     collector.start_test

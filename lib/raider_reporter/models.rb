@@ -9,7 +9,12 @@ module RaiderReporter
       super
     end
   end
-  Attachment = Data.define(:name, :source_path, :content_type)
+  # attempt: which try of the test produced it, when the caller knows (traces); nil otherwise.
+  Attachment = Data.define(:name, :source_path, :content_type, :attempt) do
+    def initialize(name:, source_path:, content_type:, attempt: nil)
+      super
+    end
+  end
   TestResult = Data.define(
     :identifier, :full_name, :file_path, :line_number, :status,
     :duration_ms, :attempts, :tags, :failure, :attachments

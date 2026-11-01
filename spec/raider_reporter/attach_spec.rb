@@ -120,6 +120,56 @@ RSpec.describe "RaiderReporter.attach" do
     end
   end
 
+  it "accepts a trace larger than max_attachment_bytes but within max_trace_bytes, with its attempt" do
+    RaiderReporter.configuration.max_attachment_bytes = 3
+    RaiderReporter.configuration.max_trace_bytes = 10
+    collector = RaiderReporter.start_collector!
+    collector.start_run
+    collector.start_test
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "trace.zip")
+      File.binwrite(path, "fivebytes")
+      expect(RaiderReporter.attach("trace", path, type: :trace, attempt: 2)).to be(true)
+      attachment = finish(collector).attachments.first
+      expect(attachment.content_type).to eq("application/vnd.raider.trace+zip")
+      expect(attachment.attempt).to eq(2)
+    end
+  end
+
+  it "rejects a trace over max_trace_bytes, even when it fits max_video_bytes" do
+    RaiderReporter.configuration.max_trace_bytes = 3
+    RaiderReporter.configuration.max_video_bytes = 10
+    collector = RaiderReporter.start_collector!
+    collector.start_run
+    collector.start_test
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "trace.zip")
+      File.binwrite(path, "abcd")
+      expect(RaiderReporter.attach("trace", path, type: "application/vnd.raider.trace+zip")).to be(false)
+      expect(err.string).to include("trace.zip").and include("larger than 3 bytes")
+      expect(finish(collector).attachments).to be_empty
+    end
+  end
+
+  it "leaves attempt nil when it is not given" do
+    collector = RaiderReporter.start_collector!
+    collector.start_run
+    collector.start_test
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "shot.png")
+      File.binwrite(path, "ab")
+      RaiderReporter.attach("screenshot", path, type: :png)
+      expect(finish(collector).attachments.first.attempt).to be_nil
+    end
+  end
+
+  it "maps the trace type and plain zip files" do
+    expect(RaiderReporter::ContentTypes.resolve(:trace, "a.bin")).to eq("application/vnd.raider.trace+zip")
+    expect(RaiderReporter::ContentTypes.resolve(nil, "bundle.zip")).to eq("application/zip")
+    expect(RaiderReporter::ContentTypes.trace?("application/vnd.raider.trace+zip")).to be(true)
+    expect(RaiderReporter::ContentTypes.trace?("application/zip")).to be(false)
+  end
+
   it "maps explicit types" do
     expect(RaiderReporter::ContentTypes.resolve(:png, "a.bin")).to eq("image/png")
     expect(RaiderReporter::ContentTypes.resolve(:video, "a.mov")).to eq("video/quicktime")

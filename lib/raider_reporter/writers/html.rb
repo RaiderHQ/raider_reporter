@@ -4,6 +4,7 @@ require "erb"
 require "fileutils"
 require "json"
 require "time"
+require_relative "../content_types"
 
 module RaiderReporter
   module Writers
@@ -229,11 +230,17 @@ module RaiderReporter
             %(<a href="#{href}"><img loading="lazy" src="#{href}" alt="#{h(attachment['name'])}"></a>)
           elsif content_type.start_with?("video/")
             %(<video controls preload="metadata" src="#{href}"></video><a href="#{href}" download>#{h(attachment['name'])}</a>)
+          elsif ContentTypes.trace?(content_type)
+            %(<a href="#{href}" download>#{h(trace_label(attachment['attempt']))}</a>)
           else
             %(<a href="#{href}">#{h(attachment['name'])}</a>)
           end
         end
         items.empty? ? "" : %(<div class="a">#{items.join(' ')}</div>)
+      end
+
+      def trace_label(attempt)
+        attempt.is_a?(Integer) ? "Trace, attempt #{attempt} (open in Raider Desktop)" : "Trace (open in Raider Desktop)"
       end
 
       # Relative paths inside the results folder only, each segment URL-encoded.

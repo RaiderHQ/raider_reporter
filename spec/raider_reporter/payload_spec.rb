@@ -71,6 +71,18 @@ RSpec.describe RaiderReporter::Payload do
     ])
   end
 
+  it "writes an attachment's attempt when it has one, in both modes" do
+    trace = RaiderReporter::Attachment.new(name: "trace", source_path: "/tmp/a/trace.zip",
+                                           content_type: "application/vnd.raider.trace+zip", attempt: 2)
+    result = payload.run.results[1].with(attachments: [trace])
+    traced = RaiderReporter::Payload.new(payload.run.with(results: [result]))
+    expect(traced.to_h(mode: :local)["results"][0]["attachments"]).to eq([
+      { "name" => "trace", "content_type" => "application/vnd.raider.trace+zip",
+        "path" => "attachments/0-trace.zip", "attempt" => 2 }
+    ])
+    expect(traced.to_h(mode: :upload)["results"][0]["attachments"][0]["attempt"]).to eq(2)
+  end
+
   it "references attachments by part in upload mode" do
     atts = payload.to_h(mode: :upload)["results"][1]["attachments"]
     expect(atts.map { |a| a["part"] }).to eq(%w[att_0 att_1])
