@@ -97,6 +97,37 @@ RSpec.describe "RaiderReporter.finish!" do
     expect(json["run"]["environment"].keys).to eq(%w[ruby os])
   end
 
+  it "writes a failed test's recorded steps into run.json and the upload, from the project's sidecar" do
+    Dir.mktmpdir do |project|
+      source = "it 'saves' do\n  click\nend\n"
+      FileUtils.mkdir_p(File.join(project, "spec"))
+      File.write(File.join(project, "spec/save_spec.rb"), source)
+      sidecar = { "version" => 1, "file" => "spec/save_spec.rb",
+                  "stepLines" => { "fileSha256" => Digest::SHA256.hexdigest(source),
+                                   "ranges" => [{ "stepId" => "s1", "start" => 2, "end" => 2, "title" => "Click" }] } }
+      FileUtils.mkdir_p(File.join(project, ".raider/tests/spec"))
+      File.write(File.join(project, ".raider/tests/spec/save_spec.rb.json"), JSON.generate(sidecar))
+      upload = stub_request(:post, "https://raider.test/api/v1/runs").to_return(status: 201, body: "{}")
+
+      Dir.chdir(project) do
+        collector = RaiderReporter.start_collector!
+        collector.start_run
+        collector.start_test
+        failure = RaiderReporter::Failure.new(message: "m", exception_class: "E",
+                                              backtrace: ["spec/save_spec.rb:2:in 'block'"])
+        collector.finish_test(identifier: "i", full_name: "n", file_path: "spec/save_spec.rb", line_number: 1,
+                              status: "failed", duration_ms: 1, attempts: 1, tags: [], failure: failure)
+      end
+      RaiderReporter.finish!(out)
+
+      steps = '"steps":{"items":[{"id":"s1","title":"Click"}],"failed":0}'
+      run_json = File.read(File.join(RaiderReporter.configuration.output_dir, "run.json"))
+      expect(JSON.parse(run_json)["results"].first["steps"])
+        .to eq("items" => [{ "id" => "s1", "title" => "Click" }], "failed" => 0)
+      expect(upload.with { |request| request.body.include?(steps) }).to have_been_made
+    end
+  end
+
   context "HTML report" do
     let(:results_dir) { RaiderReporter.configuration.output_dir }
 

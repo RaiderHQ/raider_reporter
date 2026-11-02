@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0 — 2026-11-02
+
+- Failed tests recorded in the Raider desktop carry an optional `steps` field in `run.json` and in the upload: `items` (each step's id and English title, in file order) and `failed` (the 0-based index of the step the test failed in, or `null` when the failure was outside every step). Raider shows the steps on the failed test
+- Read from the project's `.raider/tests/<file_path>.json` sidecar only, and only when its step map matches the spec file's exact bytes. No other file under `.raider/` is read, symlinks and files over 1 MB are refused, and passed or quarantined results never carry steps
+- At most 200 steps (a test with more sends none) and 500 characters per title. A malformed sidecar gives one warning per run and never fails the run
+- `schema_version` is unchanged; no breaking changes
+
 ## 0.12.0 — 2026-11-01
 
 - Raider traces: the content type `application/vnd.raider.trace+zip` (`type: :trace`) gets its own size cap, `config.max_trace_bytes` (default 25 MB). The 5 MB `max_attachment_bytes` and the 50 MB `max_video_bytes` still apply to everything else. A trace over its cap is skipped with a warning
