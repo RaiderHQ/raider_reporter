@@ -73,6 +73,7 @@ module RaiderReporter
         "tags" => result.tags
       }
       hash["failure"] = failure_hash(result.failure) if result.failure
+      hash["steps"] = result.steps if result.steps
       hash
     end
 

@@ -390,6 +390,8 @@ Tip: run `rm -rf raider-results` before a parallel run. Each process only cleans
 
 `run.json` follows schema v1, documented in [docs/schema-v1.md](docs/schema-v1.md). Statuses are `passed`, `failed`, `pending` and `skipped`, plus `quarantined` in schema 2 (written only when a run has a quarantined result). In both RSpec and Cucumber, a failure may carry `app_frame` (when a project frame is found): the first backtrace line inside your project, for example `spec/pages/login_page.rb:42:in 'LoginPage#submit'`, which Raider uses to group failures with the same error.
 
+A failed test recorded in the Raider desktop also carries `steps`: its recorded steps and the one it failed at, read from the desktop's `.raider/tests/<spec>.json` when that file's step map matches the spec file exactly. Raider shows them on the failed test. Code tests send no `steps`. See [docs/schema-v1.md](docs/schema-v1.md).
+
 ## Contributing
 
 Bug reports and pull requests are welcome at https://github.com/RaiderHQ/raider_reporter. Run `bundle install && bundle exec rake` to run the specs. To test against another Cucumber, set `CUCUMBER_VERSION` (for example `CUCUMBER_VERSION="~> 9.0" bundle update cucumber && bundle exec rspec`).

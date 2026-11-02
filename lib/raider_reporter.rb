@@ -7,6 +7,7 @@ require_relative "raider_reporter/text"
 require_relative "raider_reporter/models"
 require_relative "raider_reporter/app_frame"
 require_relative "raider_reporter/payload"
+require_relative "raider_reporter/failed_steps"
 require_relative "raider_reporter/configuration"
 require_relative "raider_reporter/quarantine"
 require_relative "raider_reporter/exec_summary"
@@ -105,7 +106,8 @@ module RaiderReporter
       detector = CiDetector.new
       ci = detector.ci
       shard = ShardDetector.new(job: ci&.fetch("job", nil)).shard
-      run = collector.finish_run(ci: ci, git: detector.git, environment: default_environment, shard: shard)
+      run = with_failed_steps(collector.finish_run(ci: ci, git: detector.git, environment: default_environment,
+                                                   shard: shard))
       payload = Payload.new(run)
       begin
         Writers::Local.new(configuration).write(payload)
@@ -139,6 +141,14 @@ module RaiderReporter
                               errors_outside_tests: counts[:errors_outside_tests])
     rescue StandardError => e
       warn("could not write the exec summary: #{e.class}: #{e.message}")
+    end
+
+    # Recorded steps for failed tests; a problem here only means no steps.
+    def with_failed_steps(run)
+      FailedSteps.apply(run, root: project_root || Dir.pwd, warn: ->(message) { warn(message) })
+    rescue StandardError => e
+      warn("could not add the recorded steps: #{e.class}: #{e.message}")
+      run
     end
 
     def write_html_report
