@@ -348,6 +348,17 @@ RSpec.describe "RaiderReporter::Cucumber::Formatter" do
       end
     end
 
+    it "keeps only the final attempt's comparison" do
+      Dir.mktmpdir do |dir|
+        results = run_cucumber("features/comparison_retry.feature", extra_args: ["--retry", "1"],
+                                                                    extra_env: attempt_env(dir))[3]
+        flaky = results.fetch("Comparison retry: Compare then flake")
+
+        expect(flaky).to include("attempts" => 2)
+        expect(flaky["comparisons"].map { |c| [c["name"], c["status"]] }).to eq([%w[home passed]])
+      end
+    end
+
     it "works in plugin mode and reports attempts 1 without --retry" do
       Dir.mktmpdir do |dir|
         results = run_cucumber("features/retry.feature", mode: "plugin", extra_args: ["--retry", "1"],

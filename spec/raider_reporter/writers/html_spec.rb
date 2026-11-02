@@ -172,6 +172,17 @@ RSpec.describe RaiderReporter::Writers::Html do
       expect(html).to include('src="attachments/3-shot.png"')
     end
 
+    it "shows the last attachment when several share a comparison image name" do
+      older = { "name" => "comparison:home:actual", "content_type" => "image/png", "path" => "attachments/old-actual.png" }
+      write_run("run.json", [result("shots", "failed", "comparisons" => [failed_comparison],
+                                                      "attachments" => [older] + images)])
+
+      described_class.new.write(dir)
+
+      expect(html).to include('src="attachments/1-actual.png"')
+      expect(html).not_to include("old-actual.png")
+    end
+
     it "summarizes passed, created and updated comparisons as one line" do
       rows = [failed_comparison.merge("status" => "passed"), failed_comparison.merge("name" => "a", "status" => "passed"),
               failed_comparison.merge("name" => "b", "status" => "created"),

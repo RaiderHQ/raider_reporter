@@ -232,7 +232,7 @@ module RaiderReporter
 
       def failed_comparison(comparison, list)
         figures = COMPARISON_KINDS.filter_map do |kind|
-          attachment = Array(list).find { |a| a.is_a?(Hash) && a["name"] == "comparison:#{comparison['name']}:#{kind}" }
+          attachment = Array(list).reverse_each.find { |a| a.is_a?(Hash) && a["name"] == "comparison:#{comparison['name']}:#{kind}" }
           href = attachment && safe_href(attachment["path"])
           next unless href
 

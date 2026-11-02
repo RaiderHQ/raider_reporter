@@ -40,6 +40,8 @@ module RaiderReporter
       @quarantined.include?(RaiderReporter.test_key(file_path, full_name))
     end
 
+    COMPARISON_IMAGE_KINDS = %w[expected actual diff].freeze
+
     attr_reader :framework_counts
 
     # What the framework itself counted (spec §4.4); nil until it reports, and
@@ -55,6 +57,7 @@ module RaiderReporter
     def start_test
       @pending_attachments = []
       @pending_comparisons = []
+      @comparison_marks = {}
     end
 
     def in_test?
@@ -68,10 +71,14 @@ module RaiderReporter
       true
     end
 
+    # A same-name comparison replaces the earlier one (rspec-retry runs the example again without a new
+    # start_test), along with the images attached before that earlier comparison was recorded.
     def compare(comparison)
       return false unless in_test?
 
+      drop_previous_comparison(comparison.name)
       @pending_comparisons << comparison
+      @comparison_marks[comparison.name] = @pending_attachments.length
       true
     end
 
@@ -103,7 +110,17 @@ module RaiderReporter
       result = TestResult.new(**fields, attachments: @pending_attachments || [], comparisons: comparisons)
       @pending_attachments = nil
       @pending_comparisons = []
+      @comparison_marks = {}
       result
+    end
+
+    def drop_previous_comparison(name)
+      return unless @pending_comparisons.reject! { |c| c.name == name }
+
+      stale = COMPARISON_IMAGE_KINDS.map { |kind| "comparison:#{name}:#{kind}" }
+      boundary = @comparison_marks.fetch(name, 0)
+      kept = @pending_attachments.each_with_index.reject { |a, i| i < boundary && stale.include?(a.name) }
+      @pending_attachments.replace(kept.map(&:first))
     end
 
     def add_result(result)

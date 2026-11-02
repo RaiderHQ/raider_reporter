@@ -95,11 +95,12 @@ module RaiderReporter
 
     COMPARISON_NAME = %r{\A[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*\z}
     COMPARISON_NAME_MAX = 100
+    COMPARISON_BASELINE_MAX = 300
 
     # Records one screenshot comparison for the running example. Images go in separately with attach, named
     # comparison:<name>:expected|actual|diff. Warns and returns false, never raises.
-    def comparison(name:, status:, baseline:, diff_pixels:, diff_ratio:, threshold:, max_diff_pixels:,
-                   max_diff_ratio: nil, expected_size: nil, actual_size: nil)
+    def comparison(name: nil, status: nil, baseline: nil, diff_pixels: nil, diff_ratio: nil, threshold: nil,
+                   max_diff_pixels: nil, max_diff_ratio: nil, expected_size: nil, actual_size: nil)
       unless collector&.in_test?
         warn("comparison(#{name.inspect}) called outside a running example; ignored")
         return false
@@ -163,9 +164,11 @@ module RaiderReporter
         return "invalid name"
       end
       return "status must be one of #{COMPARISON_STATUSES.join(', ')}" unless COMPARISON_STATUSES.include?(status)
-      return "baseline must be a string" unless baseline.is_a?(String) && !baseline.empty?
-      return "counts and thresholds must be numbers >= 0" unless ([max_diff_ratio].compact + numbers).all? do |n|
-        n.is_a?(Numeric) && n >= 0
+      unless baseline.is_a?(String) && !baseline.empty? && baseline.length <= COMPARISON_BASELINE_MAX
+        return "baseline must be a string of 1 to #{COMPARISON_BASELINE_MAX} characters"
+      end
+      return "counts and thresholds must be finite numbers >= 0" unless ([max_diff_ratio].compact + numbers).all? do |n|
+        n.is_a?(Numeric) && n.to_f.finite? && n >= 0
       end
       return "sizes must be nil or [width, height]" unless sizes.all? { |size| size.nil? || valid_size?(size) }
 

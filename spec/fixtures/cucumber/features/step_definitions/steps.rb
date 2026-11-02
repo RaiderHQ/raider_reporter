@@ -30,3 +30,9 @@ When("I attach a screenshot then fail on the first attempt") do
 end
 When("I log the screenshot path") { log ENV.fetch("FIXTURE_PNG") }
 When("I attach a screenshot pathname") { attach(Pathname.new(ENV.fetch("FIXTURE_PNG")), "image/png") }
+When("I record a comparison that is failed on the first attempt") do
+  first = fixture_attempt == 1
+  RaiderReporter.comparison(name: "home", status: first ? "failed" : "passed", baseline: "baselines/home.png",
+                            diff_pixels: 0, diff_ratio: 0, threshold: 0.2, max_diff_pixels: 0)
+  raise "flaky" if first
+end

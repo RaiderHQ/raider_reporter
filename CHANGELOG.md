@@ -2,7 +2,7 @@
 
 ## 0.14.0 — 2026-11-02
 
-- Screenshot comparisons: `RaiderReporter.comparison(name:, status:, baseline:, diff_pixels:, diff_ratio:, threshold:, max_diff_pixels:, max_diff_ratio:, expected_size:, actual_size:)` records the result of comparing a screenshot with its baseline. `status` is `passed`, `failed`, `created` or `updated`. Like `attach`, it returns `false` with a warning, never raising, outside a running example or with an invalid argument. A retried example keeps the last attempt's comparisons
+- Screenshot comparisons: `RaiderReporter.comparison(name:, status:, baseline:, diff_pixels:, diff_ratio:, threshold:, max_diff_pixels:, max_diff_ratio:, expected_size:, actual_size:)` records the result of comparing a screenshot with its baseline. `status` is `passed`, `failed`, `created` or `updated`. Like `attach`, it returns `false` with a warning, never raising, outside a running example or with an invalid argument (a missing keyword, a non-finite number, a baseline over 300 characters). A retried example keeps the last attempt's comparisons
 - Results carry an optional `comparisons` list in `run.json` and in the upload, present only when the example made one: at most 50 entries, failed ones first. The images are ordinary attachments named `comparison:<name>:expected`, `comparison:<name>:actual` and `comparison:<name>:diff`, and fall under the usual 5 MB cap
 - The local HTML report shows a failed comparison's expected, actual and diff images side by side with the pixel count, and the other statuses as one line ("2 screenshots matched")
 - Schema v1, additive: `schema_version` is unchanged and older servers ignore the key
