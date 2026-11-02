@@ -5,6 +5,7 @@ module RaiderReporter
   # files; upload mode points them at multipart part names.
   class Payload
     MODES = %i[local upload].freeze
+    MAX_COMPARISONS = 50
 
     attr_reader :run
 
@@ -74,7 +75,13 @@ module RaiderReporter
       }
       hash["failure"] = failure_hash(result.failure) if result.failure
       hash["steps"] = result.steps if result.steps
+      hash["comparisons"] = comparisons_hash(result.comparisons) if result.comparisons&.any?
       hash
+    end
+
+    # At most 50 per result; failed ones first, otherwise in the order they were made.
+    def comparisons_hash(comparisons)
+      comparisons.sort_by.with_index { |c, i| [c.status == "failed" ? 0 : 1, i] }.first(MAX_COMPARISONS).map(&:to_h)
     end
 
     def failure_hash(failure)

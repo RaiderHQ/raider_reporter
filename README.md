@@ -126,6 +126,22 @@ Videos (`.webm`, `.mp4`) are attached the same way, for example `RaiderReporter.
 
 Raider traces (`trace.zip`, content type `application/vnd.raider.trace+zip`, written by ruby_raider projects for failing tests) are attached with `RaiderReporter.attach("trace", path, type: :trace, attempt: 2)`. `attempt` is optional on any attachment. When given, it is written to the attachment's entry in `run.json` and in the upload, so a viewer can tell the traces of different retries apart. In the local HTML report a trace is a download link; open it in Raider Desktop. The format is described in the [trace viewer design](https://github.com/RaiderHQ/raider_planning/blob/main/docs/superpowers/specs/2026-11-01-trace-viewer-design.md).
 
+### Screenshot comparisons
+
+Record the result of comparing a screenshot with its baseline while an example is running:
+
+```ruby
+RaiderReporter.comparison(
+  name: "home", status: "failed", baseline: "screenshots/baselines/chrome/home.png",
+  diff_pixels: 1834, diff_ratio: 0.00088, threshold: 0.2, max_diff_pixels: 0, max_diff_ratio: nil,
+  expected_size: [1920, 1080], actual_size: [1920, 1080]
+)
+```
+
+`status` is `passed`, `failed`, `created` or `updated`. `name` matches `\A[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*\z` and is at most 100 characters. `baseline` is a non-empty string of at most 300 characters. The counts and thresholds are finite numbers `>= 0`, and the sizes are `nil` or `[width, height]`. Like `attach`, `comparison` returns `false` and prints a `[raider_reporter]` warning, never raising, when it is called outside a running example or an argument is invalid; otherwise it returns `true`. A retried example keeps the comparisons of its last attempt only; under `rspec-retry` a later comparison with the same name replaces the earlier one and drops that attempt's images.
+
+Attach the images with `RaiderReporter.attach` under the names `comparison:<name>:expected`, `comparison:<name>:actual` and `comparison:<name>:diff` (a failed comparison has all three, a created or updated one has `actual`, a passed one none). `run.json` and the upload give each result an optional `comparisons` list, present only when the example made one, with at most 50 entries (failed ones kept first). Images are linked by attachment name, not by position. The local HTML report shows a failed comparison's three images side by side under its name, and the other statuses as one line ("2 screenshots matched").
+
 When a run is uploaded, screenshots and other attachments are sent first, then traces, then videos, in the room left in the upload budget. A trace or video that does not fit is skipped and later, smaller ones are still tried. The local `raider-results/attachments/` folder keeps every attachment that passed its size cap.
 
 ## Live events

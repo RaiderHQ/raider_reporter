@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0 — 2026-11-02
+
+- Screenshot comparisons: `RaiderReporter.comparison(name:, status:, baseline:, diff_pixels:, diff_ratio:, threshold:, max_diff_pixels:, max_diff_ratio:, expected_size:, actual_size:)` records the result of comparing a screenshot with its baseline. `status` is `passed`, `failed`, `created` or `updated`. Like `attach`, it returns `false` with a warning, never raising, outside a running example or with an invalid argument (a missing keyword, a non-finite number, a baseline over 300 characters). A retried example keeps the last attempt's comparisons
+- Results carry an optional `comparisons` list in `run.json` and in the upload, present only when the example made one: at most 50 entries, failed ones first. The images are ordinary attachments named `comparison:<name>:expected`, `comparison:<name>:actual` and `comparison:<name>:diff`, and fall under the usual 5 MB cap
+- The local HTML report shows a failed comparison's expected, actual and diff images side by side with the pixel count, and the other statuses as one line ("2 screenshots matched")
+- Schema v1, additive: `schema_version` is unchanged and older servers ignore the key
+- No breaking changes
+
 ## 0.13.0 — 2026-11-02
 
 - Failed tests recorded in the Raider desktop carry an optional `steps` field in `run.json` and in the upload: `items` (each step's id and English title, in file order) and `failed` (the 0-based index of the step the test failed in, or `null` when the failure was outside every step). Raider shows the steps on the failed test

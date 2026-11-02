@@ -31,6 +31,36 @@ RSpec.describe RaiderReporter::Payload do
     )
   end
 
+  describe "comparisons" do
+    let(:comparison) do
+      RaiderReporter::Comparison.new(
+        name: "home", status: "failed", baseline: "screenshots/baselines/chrome/home.png", diff_pixels: 1834,
+        diff_ratio: 0.00088, threshold: 0.2, max_diff_pixels: 0, max_diff_ratio: nil,
+        expected_size: [1920, 1080], actual_size: [1920, 1080]
+      )
+    end
+    let(:expected) do
+      { "name" => "home", "status" => "failed", "baseline" => "screenshots/baselines/chrome/home.png",
+        "diff_pixels" => 1834, "diff_ratio" => 0.00088, "threshold" => 0.2, "max_diff_pixels" => 0,
+        "max_diff_ratio" => nil, "expected_size" => [1920, 1080], "actual_size" => [1920, 1080] }
+    end
+
+    it "omits the key and stays schema 1 when a result has none" do
+      h = payload.to_h(mode: :local)
+      expect(h["results"].flat_map(&:keys)).not_to include("comparisons")
+      expect(h["schema_version"]).to eq(1)
+    end
+
+    %i[local upload].each do |mode|
+      it "emits the exact hash in #{mode} mode" do
+        with = described_class.new(run.with(results: [failed.with(comparisons: [comparison])]))
+        h = with.to_h(mode: mode)
+        expect(h["results"].first["comparisons"]).to eq([expected])
+        expect(h["schema_version"]).to eq(1)
+      end
+    end
+  end
+
   it "serializes the shard under run.shard and omits it when nil" do
     shard = { "index" => 2, "total" => 3, "label" => "e2e#2" }
     sharded = described_class.new(run.with(shard: shard))

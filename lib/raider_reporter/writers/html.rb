@@ -16,6 +16,7 @@ module RaiderReporter
       FILE = "index.html"
       MARKER = '<meta name="generator" content="raider_reporter">'
       ROW_LIMIT = 2_000
+      COMPARISON_KINDS = %w[expected actual diff].freeze
       RUN_FILE = /\Arun(-[^\/]+)?\.json\z/
       SECTIONS = [%w[failed Failed], %w[quarantined Quarantined], %w[passed Passed], %w[pending Pending], %w[skipped Skipped]].freeze
       PROVIDERS = { "github_actions" => "GitHub Actions", "azure_pipelines" => "Azure Pipelines" }.freeze
@@ -205,7 +206,7 @@ module RaiderReporter
           <div class="r #{h(result['status'])}" data-k="#{h(key)}">
           <p class="n"><span class="b #{h(result['status'])}">#{h(result['status'])}</span> #{h(result['full_name'])}</p>
           <p class="l">#{h(location)} · #{h(format_ms(result['duration_ms'].to_i))}#{attempts}</p>
-          #{failure(result['failure'])}#{attachments(result['attachments'])}
+          #{failure(result['failure'])}#{comparisons_block(result)}
           </div>
         ROW
       end
@@ -216,6 +217,44 @@ module RaiderReporter
         trace = Array(failure["backtrace"]).join("\n")
         backtrace = trace.empty? ? "" : "<details><summary>Backtrace</summary><pre>#{h(trace)}</pre></details>"
         %(<p class="x">#{h(failure['exception_class'])}</p><pre>#{h(failure['message'])}</pre>#{backtrace})
+      end
+
+      # Failed comparisons show their expected, actual and diff images; the rest are one summary line. The images
+      # a failed comparison shows are left out of the generic attachment list.
+      def comparisons_block(result)
+        comparisons = Array(result["comparisons"]).select { |c| c.is_a?(Hash) }
+        failed = comparisons.select { |c| c["status"] == "failed" }
+        shown = failed.flat_map { |c| COMPARISON_KINDS.map { |kind| "comparison:#{c['name']}:#{kind}" } }
+        rest = result["attachments"].is_a?(Array) ? result["attachments"].reject { |a| a.is_a?(Hash) && shown.include?(a["name"]) } : []
+        failed.map { |c| failed_comparison(c, result["attachments"]) }.join +
+          comparison_summary(comparisons) + attachments(rest)
+      end
+
+      def failed_comparison(comparison, list)
+        figures = COMPARISON_KINDS.filter_map do |kind|
+          attachment = Array(list).reverse_each.find { |a| a.is_a?(Hash) && a["name"] == "comparison:#{comparison['name']}:#{kind}" }
+          href = attachment && safe_href(attachment["path"])
+          next unless href
+
+          %(<figure><a href="#{href}"><img loading="lazy" src="#{href}" alt="#{h(kind)}"></a><figcaption>#{kind}</figcaption></figure>)
+        end
+        %(<div class="c"><p class="x">#{h(comparison['name'])}</p><p class="l">#{h(comparison_difference(comparison))}</p>) +
+          (figures.empty? ? "" : %(<div class="cf">#{figures.join}</div>)) + "</div>"
+      end
+
+      def comparison_difference(comparison)
+        pixels = comparison["diff_pixels"].to_i.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
+        ratio = comparison["diff_ratio"]
+        percent = ratio.is_a?(Numeric) ? ", #{format('%.2f', ratio * 100)}%" : ""
+        "#{pixels} pixels#{percent}"
+      end
+
+      def comparison_summary(comparisons)
+        parts = { "passed" => "matched", "created" => "created", "updated" => "updated" }.filter_map do |status, verb|
+          count = comparisons.count { |c| c["status"] == status }
+          "#{count} screenshot#{'s' unless count == 1} #{verb}" if count.positive?
+        end
+        parts.empty? ? "" : %(<p class="l">#{h(parts.join(', '))}</p>)
       end
 
       def attachments(list)
@@ -290,6 +329,8 @@ module RaiderReporter
         .r p{margin:2px 0;overflow-wrap:anywhere}.n{font-weight:500}.x{color:var(--ruby);font-weight:600}
         pre{margin:4px 0;padding:8px;background:var(--card);border-radius:6px;overflow-x:auto;white-space:pre-wrap;font-size:12px}
         .a img{max-width:100%;max-height:240px;border:1px solid var(--bdr);border-radius:4px;margin-top:4px}
+        .cf{display:flex;gap:8px;flex-wrap:wrap}.cf figure{margin:0;flex:1 1 220px}.cf figcaption{color:var(--mute);font-size:12px}
+        .cf img{max-width:100%;max-height:240px;border:1px solid var(--bdr);border-radius:4px}
         .a video{max-width:100%;max-height:360px;display:block}
         a{color:var(--ruby)}.empty{padding:24px 0;color:var(--mute)}
       CSS

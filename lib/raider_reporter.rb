@@ -93,6 +93,35 @@ module RaiderReporter
       false
     end
 
+    COMPARISON_NAME = %r{\A[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*\z}
+    COMPARISON_NAME_MAX = 100
+    COMPARISON_BASELINE_MAX = 300
+
+    # Records one screenshot comparison for the running example. Images go in separately with attach, named
+    # comparison:<name>:expected|actual|diff. Warns and returns false, never raises.
+    def comparison(name: nil, status: nil, baseline: nil, diff_pixels: nil, diff_ratio: nil, threshold: nil,
+                   max_diff_pixels: nil, max_diff_ratio: nil, expected_size: nil, actual_size: nil)
+      unless collector&.in_test?
+        warn("comparison(#{name.inspect}) called outside a running example; ignored")
+        return false
+      end
+
+      problem = comparison_problem(name, status, baseline, [diff_pixels, diff_ratio, threshold, max_diff_pixels],
+                                   max_diff_ratio, [expected_size, actual_size])
+      if problem
+        warn("comparison(#{name.inspect}): #{problem}; ignored")
+        return false
+      end
+
+      collector.compare(Comparison.new(name: name, status: status, baseline: baseline.to_s, diff_pixels: diff_pixels,
+                                       diff_ratio: diff_ratio, threshold: threshold, max_diff_pixels: max_diff_pixels,
+                                       max_diff_ratio: max_diff_ratio, expected_size: expected_size,
+                                       actual_size: actual_size))
+    rescue StandardError => e
+      warn("comparison(#{name.inspect}) failed: #{e.class}: #{e.message}")
+      false
+    end
+
     def warn(message)
       # $stderr.puts, not Kernel.warn: -W0 must not silence reporting problems.
       $stderr.puts("[raider_reporter] #{message}")
@@ -129,6 +158,26 @@ module RaiderReporter
     end
 
     private
+
+    def comparison_problem(name, status, baseline, numbers, max_diff_ratio, sizes)
+      if !name.is_a?(String) || name.length > COMPARISON_NAME_MAX || !name.match?(COMPARISON_NAME)
+        return "invalid name"
+      end
+      return "status must be one of #{COMPARISON_STATUSES.join(', ')}" unless COMPARISON_STATUSES.include?(status)
+      unless baseline.is_a?(String) && !baseline.empty? && baseline.length <= COMPARISON_BASELINE_MAX
+        return "baseline must be a string of 1 to #{COMPARISON_BASELINE_MAX} characters"
+      end
+      return "counts and thresholds must be finite numbers >= 0" unless ([max_diff_ratio].compact + numbers).all? do |n|
+        n.is_a?(Numeric) && n.to_f.finite? && n >= 0
+      end
+      return "sizes must be nil or [width, height]" unless sizes.all? { |size| size.nil? || valid_size?(size) }
+
+      nil
+    end
+
+    def valid_size?(size)
+      size.is_a?(Array) && size.length == 2 && size.all? { |n| n.is_a?(Integer) && n >= 0 }
+    end
 
     # First, so a later reporting problem cannot lose it. A failure here only means
     # no summary, and exec then keeps the command's exit code.
