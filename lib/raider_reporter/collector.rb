@@ -23,6 +23,7 @@ module RaiderReporter
       @quarantined = nil
       @results = []
       @pending_attachments = nil
+      @pending_comparisons = []
       @staged = 0
     end
 
@@ -53,6 +54,7 @@ module RaiderReporter
 
     def start_test
       @pending_attachments = []
+      @pending_comparisons = []
     end
 
     def in_test?
@@ -63,6 +65,13 @@ module RaiderReporter
       return false unless in_test?
 
       @pending_attachments << attachment
+      true
+    end
+
+    def compare(comparison)
+      return false unless in_test?
+
+      @pending_comparisons << comparison
       true
     end
 
@@ -90,8 +99,10 @@ module RaiderReporter
     # Closes the current test and returns its result without recording it, so a
     # framework that retries can hold one result per test and replace it per attempt.
     def build_test(**fields)
-      result = TestResult.new(**fields, attachments: @pending_attachments || [])
+      comparisons = @pending_comparisons.empty? ? nil : @pending_comparisons
+      result = TestResult.new(**fields, attachments: @pending_attachments || [], comparisons: comparisons)
       @pending_attachments = nil
+      @pending_comparisons = []
       result
     end
 
