@@ -146,6 +146,59 @@ RSpec.describe RaiderReporter::Writers::Html do
     expect(html).to include(%(<a href="attachments/1-trace.zip" download>Trace (open in Raider Desktop)</a>))
   end
 
+  describe "screenshot comparisons" do
+    let(:failed_comparison) do
+      { "name" => "home", "status" => "failed", "baseline" => "screenshots/baselines/chrome/home.png",
+        "diff_pixels" => 1834, "diff_ratio" => 0.00088, "threshold" => 0.2, "max_diff_pixels" => 0,
+        "max_diff_ratio" => nil, "expected_size" => [1920, 1080], "actual_size" => [1920, 1080] }
+    end
+    let(:images) do
+      %w[expected actual diff].each_with_index.map do |kind, i|
+        { "name" => "comparison:home:#{kind}", "content_type" => "image/png", "path" => "attachments/#{i}-#{kind}.png" }
+      end
+    end
+
+    it "shows a failed comparison as three images side by side and not again in the attachment list" do
+      other = { "name" => "screenshot", "content_type" => "image/png", "path" => "attachments/3-shot.png" }
+      write_run("run.json", [result("shots", "failed", "comparisons" => [failed_comparison],
+                                                      "attachments" => images + [other])])
+
+      described_class.new.write(dir)
+
+      %w[expected actual diff].each_with_index do |kind, i|
+        expect(html.scan(%(src="attachments/#{i}-#{kind}.png")).length).to eq(1)
+      end
+      expect(html).to include("home", "1,834 pixels", "0.09%")
+      expect(html).to include('src="attachments/3-shot.png"')
+    end
+
+    it "summarizes passed, created and updated comparisons as one line" do
+      rows = [failed_comparison.merge("status" => "passed"), failed_comparison.merge("name" => "a", "status" => "passed"),
+              failed_comparison.merge("name" => "b", "status" => "created"),
+              failed_comparison.merge("name" => "c", "status" => "updated")]
+      write_run("run.json", [result("shots", "passed", "comparisons" => rows)])
+
+      described_class.new.write(dir)
+
+      expect(html).to include("2 screenshots matched", "1 screenshot created", "1 screenshot updated")
+    end
+
+    it "escapes names and ignores unsafe or missing image paths" do
+      evil = failed_comparison.merge("name" => "<script>x</script>")
+      bad = [{ "name" => "comparison:<script>x</script>:diff", "content_type" => "image/png", "path" => "../../etc/x.png" }]
+      write_run("run.json", [result("shots", "failed", "comparisons" => [evil], "attachments" => bad)])
+
+      described_class.new.write(dir)
+
+      expect(html).not_to include("<script>x</script>", "etc/x.png")
+    end
+
+    it "tolerates a malformed comparisons value" do
+      write_run("run.json", [result("shots", "failed", "comparisons" => "nope")])
+      expect { described_class.new.write(dir) }.not_to raise_error
+    end
+  end
+
   it "renders videos as an inline player with a download link and drops unsafe video paths" do
     attachments = [
       { "name" => "video", "content_type" => "video/webm", "path" => "attachments/a b/clip.webm" },
