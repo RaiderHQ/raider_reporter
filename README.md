@@ -1,6 +1,6 @@
 # raider_reporter
 
-Raider-schema test reporting for RSpec and Cucumber. `raider_reporter` is an RSpec formatter and a Cucumber reporter that records every example's result, failure details, screenshots and videos, writes them to a local `run.json` (schema v1, or v2 when a run has a quarantined result), and can optionally upload the run to a Raider server. It replaces Allure for Ruby Raider projects.
+Raider-schema test reporting for RSpec. `raider_reporter` is an RSpec formatter that records every example's result, failure details, screenshots and videos, writes them to a local `run.json` (schema v1, or v2 when a run has a quarantined result), and can optionally upload the run to a Raider server. It replaces Allure for Ruby Raider projects.
 
 It has no runtime dependencies and requires Ruby 3.2 or newer.
 
@@ -26,80 +26,7 @@ Enable the formatter in `.rspec`:
 --format RaiderReporter::RSpec::Formatter
 ```
 
-Run `bundle exec rspec` as usual. (For Cucumber, see [Cucumber](#cucumber).) Results land in `raider-results/run.json`. A dry run (`rspec --dry-run`) writes and uploads nothing.
-
-## Cucumber
-
-Requirements: Cucumber 9, 10, 11 or 12 (12 needs Ruby 3.3+) in your own Gemfile (`gem "cucumber"`). It is not a dependency of this gem; requiring `raider_reporter/cucumber` without Cucumber raises a `LoadError` that says so. Cucumber 9.2.1 on Ruby 4 also needs `gem "logger"` in your Gemfile, because Cucumber requires it without declaring it.
-
-### Plugin mode (recommended)
-
-Require the reporter from a file under `features/support/`, for example `features/support/raider.rb`:
-
-```ruby
-require "raider_reporter/cucumber"
-```
-
-Then run Cucumber with any normal formatter and no `--out`:
-
-```
-# cucumber.yml
-default: --format pretty
-```
-
-The require registers one listener on Cucumber's event bus, so it sits next to `pretty`, `progress` or any other formatter. Results land in `raider-results/run.json`, and a dry run (`cucumber --dry-run`) writes and uploads nothing. Plugin mode registers once per Ruby process, because `require` is cached: a second in-process `Cucumber::Cli::Main` run in the same process does not register again.
-
-### Formatter mode
-
-You can also name the formatter explicitly:
-
-```
-cucumber --format pretty --format RaiderReporter::Cucumber::Formatter --out raider-results/cucumber.log
-```
-
-`--out` is required here. Cucumber rejects a second formatter on the same output stream ("All but one formatter must use --out", also in 9.2.1), and this formatter writes nothing to its stream, so give it any file path (it is never created). If both modes are active, only one listener is registered.
-
-### How tests are identified
-
-- `file_path` is relative to the project root (`features/login.feature`), even when Cucumber is given `./features/login.feature` or an absolute path.
-- `full_name` is `"<Feature name>: <Scenario name>"`. Scenario Outline rows are `"<Feature name>: <Scenario name> (<Examples name or 'Examples'>, row <n>)"`, where `n` is the 1-based data row of that Examples table. When two or more Examples tables of one outline share a label (for example two unnamed ones), every table with that label is numbered by its position among them, `(Examples 1, row 1)`, `(Examples 2, row 1)`, so each row keeps a distinct name; tables with a unique label are unchanged.
-- `identifier` is `"<file_path>:<line>"`: the scenario line, or the Examples row line for outline rows.
-- `tags` are the feature, scenario and Examples tags, merged, sorted, unique, without `@`.
-
-Statuses: passed, failed and ambiguous (reported as failed), pending and undefined (reported as pending), skipped. Failed (and ambiguous) scenarios on the quarantine list are reported as quarantined.
-
-### Failures
-
-A failed test reports the step that failed, not the whole scenario:
-
-```
-When I fail on purpose (features/login.feature:9)
-
-expected 5, got 4
-```
-
-A failing `Before` or `After` hook is named `Before hook` or `After hook` in place of the step, so an `After` hook that raises after every step passed is still a failed test. Messages are capped at 10,000 characters and backtraces at 50 lines.
-
-### Retries
-
-With `--retry n`, only the final attempt of each scenario is reported, and `attempts` is the number of attempts. Each attempt starts with fresh attachments; attachments from earlier attempts are dropped.
-
-### Attachments
-
-Both of these are captured while a scenario runs:
-
-```ruby
-After do |scenario|
-  attach(path, "image/png") if scenario.failed?        # Cucumber's own attach, with an existing file path (a Pathname works too)
-  RaiderReporter.attach("screenshot", path, type: :png) # or the Raider helper, as in RSpec
-end
-```
-
-Cucumber's `attach` is captured only when given the path of an existing file. Inline data (`attach("some text", "text/plain")`) and `log` messages are ignored.
-
-### Parallel runs with Cucumber
-
-`parallel_tests` works with no configuration for Cucumber too: each process writes `run-<n>.json`. See [Parallel runs](#parallel-runs).
+Run `bundle exec rspec` as usual. Results land in `raider-results/run.json`. A dry run (`rspec --dry-run`) writes and uploads nothing.
 
 ## Attaching screenshots, videos and traces
 
@@ -146,7 +73,7 @@ When a run is uploaded, screenshots and other attachments are sent first, then t
 
 ## Live events
 
-Set `RAIDER_EVENTS_DIR` and the RSpec formatter, or the Cucumber formatter/plugin, appends one JSON line per event to `<dir>/worker-<n>.ndjson` (`n` is the shard index, or 1): `plan` (the examples that will run), `started`, `finished` (status, duration, attempts; Cucumber writes one `started`/`finished` pair per `--retry` attempt) and `done`. Raider desktop tails these files for live results. Unset, nothing is written; a write error turns the stream off with one warning.
+Set `RAIDER_EVENTS_DIR` and the RSpec formatter appends one JSON line per event to `<dir>/worker-<n>.ndjson` (`n` is the shard index, or 1): `plan` (the examples that will run), `started`, `finished` (status, duration, attempts) and `done`. Raider desktop tails these files for live results. Unset, nothing is written; a write error turns the stream off with one warning.
 
 ## Configuration
 
@@ -219,14 +146,13 @@ A test quarantined in Raider (with a reason and an expiry) still runs and is sti
 
    ```
    bundle exec raider-reporter exec -- bundle exec rspec
-   bundle exec raider-reporter exec -- bundle exec cucumber
    ```
 
 When the run starts, the formatter fetches the project's quarantine list once (`GET /api/v1/quarantine`, 3-second timeout). On any error it prints `[raider_reporter] quarantine list unavailable (<reason>); no tests quarantined` and nothing is quarantined. Matching failures keep their message, backtrace and screenshots; the run is written as schema 2, and `run.json`, the upload and the HTML report show `quarantined`.
 
-`exec` runs the command without a shell and exits with its status, with one exception: when the command exits 1, every failure the framework counted is quarantined, and nothing went wrong outside tests, it prints `raider-reporter: N quarantined failure(s) did not fail the build` to stderr and exits 0. "Outside tests" means RSpec errors outside examples, a run stopped early (`--fail-fast`, an interrupt, a load error), or a Cucumber run that did not finish every scenario. RSpec `--fail-fast` counts even when the last example triggers it, and interrupts count too, so the build stays red. Under Cucumber `--strict`, a flaky scenario (failed, then passed on retry) counts as a real failure and keeps the build red. A command killed by a signal exits 128 + the signal number; a command that cannot be started exits 127. Several processes under one `exec` (for example `parallel_rspec`) never turn red into green: their summaries conflict and the command's exit code is used.
+`exec` runs the command without a shell and exits with its status, with one exception: when the command exits 1, every failure the framework counted is quarantined, and nothing went wrong outside tests, it prints `raider-reporter: N quarantined failure(s) did not fail the build` to stderr and exits 0. "Outside tests" means RSpec errors outside examples or a run stopped early (`--fail-fast`, an interrupt, a load error). RSpec `--fail-fast` counts even when the last example triggers it, and interrupts count too, so the build stays red. A command killed by a signal exits 128 + the signal number; a command that cannot be started exits 127. Several processes under one `exec` (for example `parallel_rspec`) never turn red into green: their summaries conflict and the command's exit code is used.
 
-Without `exec`, RSpec and Cucumber exit codes are unchanged; quarantine only changes how failures are reported.
+Without `exec`, the RSpec exit code is unchanged; quarantine only changes how failures are reported.
 
 ## Pull request comments
 
@@ -399,18 +325,17 @@ Tip: run `rm -rf raider-results` before a parallel run. Each process only cleans
 ## Examples
 
 - `examples/rspec_basic` is a runnable RSpec project with a passing, a failing (with an attachment) and a skipped example. Run it with `cd examples/rspec_basic && bundle install && bundle exec rspec`; the failure is deliberate.
-- `examples/cucumber_basic` is the same for Cucumber (plugin mode): a passing scenario, a failing one with an attachment, and an outline. Run it with `cd examples/cucumber_basic && bundle install && bundle exec cucumber`; the failure is deliberate.
 - `examples/github_actions.yml` shows the workflow steps for CI.
 
 ## Schema
 
-`run.json` follows schema v1, documented in [docs/schema-v1.md](docs/schema-v1.md). Statuses are `passed`, `failed`, `pending` and `skipped`, plus `quarantined` in schema 2 (written only when a run has a quarantined result). In both RSpec and Cucumber, a failure may carry `app_frame` (when a project frame is found): the first backtrace line inside your project, for example `spec/pages/login_page.rb:42:in 'LoginPage#submit'`, which Raider uses to group failures with the same error.
+`run.json` follows schema v1, documented in [docs/schema-v1.md](docs/schema-v1.md). Statuses are `passed`, `failed`, `pending` and `skipped`, plus `quarantined` in schema 2 (written only when a run has a quarantined result). A failure may carry `app_frame` (when a project frame is found): the first backtrace line inside your project, for example `spec/pages/login_page.rb:42:in 'LoginPage#submit'`, which Raider uses to group failures with the same error.
 
 A failed test recorded in the Raider desktop also carries `steps`: its recorded steps and the one it failed at, read from the desktop's `.raider/tests/<spec>.json` when that file's step map matches the spec file exactly. Raider shows them on the failed test. Code tests send no `steps`. See [docs/schema-v1.md](docs/schema-v1.md).
 
 ## Contributing
 
-Bug reports and pull requests are welcome at https://github.com/RaiderHQ/raider_reporter. Run `bundle install && bundle exec rake` to run the specs. To test against another Cucumber, set `CUCUMBER_VERSION` (for example `CUCUMBER_VERSION="~> 9.0" bundle update cucumber && bundle exec rspec`).
+Bug reports and pull requests are welcome at https://github.com/RaiderHQ/raider_reporter. Run `bundle install && bundle exec rake` to run the specs.
 
 ## License
 

@@ -61,10 +61,10 @@ Rules:
   `azure_pipelines:<collection host and path>/<project id>/<repository id>:<build id>:<attempt>`. The key uses ids, not names, so renames and names with spaces do not change it.
   `run.shard` comes from `strategy: parallel` (`System.JobPositionInPhase` / `System.TotalJobsInPhase`) when more than one job runs.
 - `failure` is present only when `status` is `failed` (or `quarantined`, schema 2).
-- `failure.app_frame` (optional string, at most 500 characters, added in reporter 0.6.0) is the first line of the raw exception backtrace inside the project root (the working directory when the run starts), skipping `vendor/`, `.bundle/`, installed gems, Ruby's standard library and `<internal:...>` lines. The path is relative to the project root and the rest of the line (line number, `in '...'`) is unchanged. It is taken from the full backtrace, so it can differ from the first line of the (filtered, 50-line) `backtrace`. The key is omitted when no line qualifies (for Cucumber the backtrace may already have been filtered by other formatters, in which case the field may be omitted) or the reporter could not compute it; consumers must then fall back to `backtrace`. Older servers ignore it.
+- `failure.app_frame` (optional string, at most 500 characters, added in reporter 0.6.0) is the first line of the raw exception backtrace inside the project root (the working directory when the run starts), skipping `vendor/`, `.bundle/`, installed gems, Ruby's standard library and `<internal:...>` lines. The path is relative to the project root and the rest of the line (line number, `in '...'`) is unchanged. It is taken from the full backtrace, so it can differ from the first line of the (filtered, 50-line) `backtrace`. The key is omitted when no line qualifies or the reporter could not compute it; consumers must then fall back to `backtrace`. Older servers ignore it.
 - `steps` (optional object, added in reporter 0.13.0) is present only on `failed` results of tests recorded in the Raider desktop. It is `{ "items": [{ "id": "s1", "title": "Click \"Save\"" }, …], "failed": 2 }`. `items` lists the recorded steps in file order (1 to 200; titles at most 500 characters, in English). `failed` is the 0-based index of the step the failure happened in, or `null` when the failure was outside every step. The key `failed` is always present. The reporter reads the project's desktop sidecar `.raider/tests/<file_path>.json` (no other file under `.raider/`) and sends `steps` only when the sidecar's `stepLines` map was made for the spec file's exact bytes (sha256) and every range has a title. A missing or out-of-date map means no `steps`; a malformed one means no `steps` and one warning per run. The step is found from the first `backtrace` line in `file_path`, else from `app_frame` when it is in `file_path`. `schema_version` does not change; older servers ignore the key.
 - `comparisons` (optional array, added in reporter 0.14.0) is present only when the test made a screenshot comparison. Each entry has `name`, `status` (`passed`, `failed`, `created` or `updated`), `baseline` (at most 300 characters), `diff_pixels`, `diff_ratio`, `threshold`, `max_diff_pixels`, `max_diff_ratio` (may be `null`), `expected_size` and `actual_size` (`[width, height]` or `null`). At most 50 entries; failed ones come first. The images are attachments named `comparison:<name>:expected`, `comparison:<name>:actual` and `comparison:<name>:diff`. `schema_version` does not change; older servers ignore the key.
-- `attempts` defaults to 1; read from `rspec-retry` metadata when present (RSpec) or counted from Cucumber's `--retry` attempts.
+- `attempts` defaults to 1; read from `rspec-retry` metadata when present.
 - Test identity: `test_key = SHA256("#{file_path}\0#{full_name}")`, computed by
   the server. `identifier` is stored for display only (it changes on reorder).
 - Limits: 50 MB per request; 5 MB per non-video attachment and 50 MB per `video/*` attachment. The reporter keeps an upload under 45 MB of attachments and 1000 files, non-video attachments first and videos in the room left.
@@ -98,23 +98,6 @@ The local `raider-results/run.json` uses the same JSON, with `attachments[].path
 `run-<index>.json` and `attachments-<index>/` instead, so readers should load
 `run*.json`.
 
-
-## Cucumber mapping
-
-Cucumber results use the same fields; there is no Cucumber-specific schema change.
-
-| Field | Cucumber value |
-|---|---|
-| `file_path` | feature file relative to the project root, e.g. `features/login.feature` (also for `./` and absolute paths) |
-| `full_name` | `"<Feature name>: <Scenario name>"`; outline rows `"<Feature name>: <Scenario name> (<Examples name or 'Examples'>, row <n>)"`, `n` = 1-based data row in that Examples table; when several Examples tables of one outline share a label, each is numbered by position among them (`Examples 1`, `Examples 2`) |
-| `tags` | feature, scenario and Examples tags, merged, sorted, unique, without `@` |
-| `identifier` | `"<file_path>:<line>"` (scenario line, or the Examples row line) |
-| `line_number` | scenario line, or the Examples row line |
-| `status` | passed→passed; failed, ambiguous→failed (quarantined when the scenario is on the quarantine list); pending, undefined→pending; skipped→skipped |
-| `failure.message` | `"<Keyword><step text> (<file>:<line>)\n\n<exception message>"`; `Before hook` / `After hook` replaces the step for hook failures; at most 10,000 characters, UTF-8 scrubbed |
-| `failure.backtrace` | at most 50 lines |
-| `attempts` | number of attempts under `--retry`; only the final attempt is reported |
-| `attachments` | files attached with `RaiderReporter.attach` or Cucumber's `attach(path, media_type)` during the final attempt |
 
 ## Schema version 2
 
