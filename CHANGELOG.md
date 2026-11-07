@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0 — 2026-11-07
+
+- Breaking: the Cucumber formatter and plugin are removed; `require "raider_reporter/cucumber"` raises `LoadError`. RSpec is the only supported framework (ruby_raider 4.0.0 drops Cucumber)
+- Breaking: `RaiderReporter.dry_run=` is removed; dry runs are read from RSpec's configuration
+- Schema v1 and v2 are unchanged
+
 ## 0.14.0 — 2026-11-02
 
 - Screenshot comparisons: `RaiderReporter.comparison(name:, status:, baseline:, diff_pixels:, diff_ratio:, threshold:, max_diff_pixels:, max_diff_ratio:, expected_size:, actual_size:)` records the result of comparing a screenshot with its baseline. `status` is `passed`, `failed`, `created` or `updated`. Like `attach`, it returns `false` with a warning, never raising, outside a running example or with an invalid argument (a missing keyword, a non-finite number, a baseline over 300 characters). A retried example keeps the last attempt's comparisons
