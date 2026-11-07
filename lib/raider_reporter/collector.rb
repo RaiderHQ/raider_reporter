@@ -7,7 +7,7 @@ require "set"
 require_relative "content_types"
 
 module RaiderReporter
-  # Accumulates one suite run. Framework formatters call it; writers read the Run it returns.
+  # Accumulates one suite run. The RSpec formatter calls it; writers read the Run it returns.
   class Collector
     def initialize(max_attachment_bytes:, warn:, max_video_bytes: Configuration::DEFAULT_MAX_VIDEO_BYTES,
                    max_trace_bytes: Configuration::DEFAULT_MAX_TRACE_BYTES,
@@ -103,8 +103,7 @@ module RaiderReporter
       add_result(build_test(**fields))
     end
 
-    # Closes the current test and returns its result without recording it, so a
-    # framework that retries can hold one result per test and replace it per attempt.
+    # Closes the current test and returns its result without recording it.
     def build_test(**fields)
       comparisons = @pending_comparisons.empty? ? nil : @pending_comparisons
       result = TestResult.new(**fields, attachments: @pending_attachments || [], comparisons: comparisons)
