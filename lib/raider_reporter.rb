@@ -35,11 +35,7 @@ module RaiderReporter
       yield configuration
     end
 
-    # Set by the Cucumber formatter when the run is a --dry-run.
-    attr_writer :dry_run
-
     def reset!
-      @dry_run = false
       @collector&.cleanup
       @event_stream&.close
       @event_stream = nil
@@ -50,7 +46,6 @@ module RaiderReporter
     end
 
     def start_collector!
-      @dry_run = false
       @project_root = Dir.pwd
       @event_stream&.close
       @event_stream = EventStream.open(warn: ->(message) { warn(message) })
@@ -216,10 +211,8 @@ module RaiderReporter
       "Raider report uploaded"
     end
 
-    # `rspec --dry-run` and `cucumber --dry-run` report every example as passed without running it.
+    # `rspec --dry-run` reports every example as passed without running it.
     def dry_run?
-      return true if @dry_run
-
       defined?(::RSpec.configuration) && ::RSpec.configuration.respond_to?(:dry_run?) &&
         ::RSpec.configuration.dry_run?
     end
