@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RaiderReporter
-  # Text limits and cleaning shared by the framework formatters.
+  # Text limits and cleaning shared across the reporter.
   module Text
     MAX_MESSAGE = 10_000
     MAX_BACKTRACE = 50
